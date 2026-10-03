@@ -1,0 +1,73 @@
+# .NET y Build
+.dotnet_cli/
+.nuget/
+.artifacts/
+**/bin/
+**/obj/
+TestResults/
+[Tt]est[Rr]esult*/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Entornos virtuales
+.venv/
+.venv-export/
+venv/
+env/
+.local-test/
+
+# Configuracion local y secretos
+.env
+.env.*
+!.env.example
+config.local.yaml
+*.local.json
+
+# Datos generados en ejecucion y logs
+*.log
+logs/
+eventos.jsonl
+*.jsonl
+*.db
+*.db-*
+data/*.db
+data/*.db-*
+data/snapshots/
+recordings/
+*.crash
+*.dmp
+
+# Modelos binarios y medios locales
+*.pt
+*.onnx
+videos/
+*.mp4
+*.avi
+*.mkv
+
+# Editores e IDEs
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*.pidb
+*.booproj
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+

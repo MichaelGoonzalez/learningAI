@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.18362.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../HandRaise.Application/HandRaise.Application.csproj" />
+    <ProjectReference Include="../HandRaise.Domain/HandRaise.Domain.csproj" />
+    <ProjectReference Include="../HandRaise.Infrastructure.Windows/HandRaise.Infrastructure.Windows.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="appsettings.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+    <Content Include="../../models/yolo26n-pose.onnx" Link="models/yolo26n-pose.onnx"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="../../models/model.manifest.json" Link="models/model.manifest.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+  </ItemGroup>
+</Project>

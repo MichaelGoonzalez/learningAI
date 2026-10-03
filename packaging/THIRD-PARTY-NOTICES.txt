@@ -1,0 +1,20 @@
+HAND RAISE DETECTION - AVISOS DE TERCEROS
+
+Modelo yolo26n-pose.onnx
+Licencia: AGPL-3.0. Origen: https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-pose.pt
+Información: https://docs.ultralytics.com/tasks/pose/ y https://www.ultralytics.com/license
+SHA-256: c56815ab17dd8ed15f507f12800650c28c97e46ab9b33b23fc2c57a57f9035b1
+
+CommunityToolkit.Mvvm 8.4.2 - MIT - https://github.com/CommunityToolkit/dotnet
+Microsoft.Windows.AI.MachineLearning 2.3.42, ONNX Runtime y DirectML - MIT - https://github.com/microsoft/WindowsAppSDK y https://github.com/microsoft/onnxruntime
+Microsoft.EntityFrameworkCore/Extensions/Data.Sqlite 10.0.12 y runtime .NET - MIT - https://github.com/dotnet/efcore y https://github.com/dotnet/runtime
+SQLitePCLRaw 2.1.12 - Apache-2.0 - https://github.com/ericsink/SQLitePCL.raw
+SQLite nativo - dominio público - https://www.sqlite.org/copyright.html
+OpenCvSharp5 y OpenCvSharp5.runtime.win 5.0.0.20260905 - Apache-2.0 - https://github.com/shimat/opencvsharp
+OpenCV nativo - Apache-2.0 - https://github.com/opencv/opencv
+FFmpeg (opencv_videoio_ffmpeg500_64.dll) - LGPL-2.1-or-later - https://ffmpeg.org/legal.html
+Vortice.DXGI/DirectX 3.8.3 y Vortice.Mathematics 2.1.0 - MIT - https://github.com/amerkoleci/Vortice.Windows
+SharpGen.Runtime/COM 2.4.2-beta - MIT - https://github.com/SharpGenTools/SharpGenTools
+System.Numerics.Tensors 9.0.0 - MIT - https://github.com/dotnet/runtime
+
+Los textos completos de licencia se obtienen en los orígenes indicados. Esta aplicación no agrega servicios de pago ni telemetría propia.

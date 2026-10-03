@@ -1,0 +1,61 @@
+model:
+  weights: yolo26n-pose.pt
+  device: auto
+  image_size: 640
+  confidence: 0.35
+  iou: 0.50
+  half_precision: true
+  tracker_config: bytetrack.yaml
+
+detection:
+  keypoint_confidence: 0.45
+  shoulder_margin_px: null
+  shoulder_margin_ratio: 0.15
+  strict_mode: false
+  strict_margin_px: 10
+  zone_reference: shoulder_midpoint
+  consecutive_frames: 5
+  hold_time_ms: null
+  lower_consecutive_frames: 3
+  cooldown_ms: 1500
+  track_ttl_ms: 3000
+
+runtime:
+  batch_size: 4
+  inference_interval_ms: 0
+  capture_buffer_size: 2
+  reconnect_delay_ms: 2000
+  max_reconnect_delay_ms: 30000
+  fallback_fps: 30.0
+  jpeg_quality: 85
+
+cameras:
+  - id: demo
+    name: Camara de demostracion
+    source: ${CAMERA_DEMO_SOURCE:-./videos/demo.mp4}
+    enabled: true
+    loop: false
+    zone_filter_enabled: false
+    zones:
+      - name: attention_area
+        points:
+          - [100, 100]
+          - [1180, 100]
+          - [1180, 680]
+          - [100, 680]
+
+storage:
+  database_url: sqlite:///./data/hand_raise.db
+  snapshots_dir: ./data/snapshots
+  snapshot_quality: 90
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  cors_origins:
+    - http://localhost:4200
+    - http://localhost:3000
+  api_key: null
+
+hardware:
+  settings_path: null

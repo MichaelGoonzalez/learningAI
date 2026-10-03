@@ -1,0 +1,41 @@
+<Application x:Class="HandRaise.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+        <SolidColorBrush x:Key="WindowBackground" Color="#101317" />
+        <SolidColorBrush x:Key="Surface" Color="#191E24" />
+        <SolidColorBrush x:Key="SurfaceAlt" Color="#222932" />
+        <SolidColorBrush x:Key="PrimaryText" Color="#F2F5F7" />
+        <SolidColorBrush x:Key="SecondaryText" Color="#AAB4BE" />
+        <SolidColorBrush x:Key="Accent" Color="#4FA3FF" />
+        <SolidColorBrush x:Key="Success" Color="#4EBE7B" />
+        <SolidColorBrush x:Key="Warning" Color="#F7B84B" />
+        <SolidColorBrush x:Key="Danger" Color="#FF6B6B" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#303945" />
+
+        <Style TargetType="Window">
+            <Setter Property="Background" Value="{DynamicResource WindowBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Accent}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="14,7" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceAlt}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+        </Style>
+        <Style TargetType="DatePicker">
+            <Setter Property="Padding" Value="5" />
+        </Style>
+    </Application.Resources>
+</Application>

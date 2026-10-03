@@ -1,0 +1,2 @@
+"""Configuracion y utilidades transversales."""
+

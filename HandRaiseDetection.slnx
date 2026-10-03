@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HandRaise.Application/HandRaise.Application.csproj" />
+    <Project Path="src/HandRaise.Domain/HandRaise.Domain.csproj" />
+    <Project Path="src/HandRaise.Infrastructure.Windows/HandRaise.Infrastructure.Windows.csproj" />
+    <Project Path="src/HandRaise.DeviceProbe/HandRaise.DeviceProbe.csproj" />
+    <Project Path="src/HandRaise.DebugApp/HandRaise.DebugApp.csproj" />
+    <Project Path="src/HandRaise.Desktop/HandRaise.Desktop.csproj" />
+    <Project Path="src/HandRaise.InferenceProbe/HandRaise.InferenceProbe.csproj" />
+    <Project Path="src/HandRaise.Host/HandRaise.Host.csproj" />
+  </Folder>
+  <Folder Name="/tests-csharp/">
+    <Project Path="tests-csharp/HandRaise.Application.Tests/HandRaise.Application.Tests.csproj" />
+    <Project Path="tests-csharp/HandRaise.Domain.Tests/HandRaise.Domain.Tests.csproj" />
+    <Project Path="tests-csharp/HandRaise.Infrastructure.Windows.Tests/HandRaise.Infrastructure.Windows.Tests.csproj" />
+    <Project Path="tests-csharp/HandRaise.Host.Tests/HandRaise.Host.Tests.csproj" />
+  </Folder>
+</Solution>
