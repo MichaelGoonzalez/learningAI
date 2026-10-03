@@ -25,7 +25,8 @@ public static class AnalyticEventAdapter
             Timestamp: genericEvent.TimestampUtc,
             SnapshotUrl: genericEvent.SnapshotUrl,
             NodeId: genericEvent.NodeId,
-            SiteId: genericEvent.SiteId)
+            SiteId: genericEvent.SiteId,
+            Metadata: genericEvent.Metadata)
         {
             SnapshotJpeg = genericEvent.SnapshotJpeg
         };
@@ -35,10 +36,14 @@ public static class AnalyticEventAdapter
     {
         ArgumentNullException.ThrowIfNull(handEvent);
 
-        var metadata = new Dictionary<string, object?>
+        var metadata = handEvent.Metadata != null
+            ? new Dictionary<string, object?>(handEvent.Metadata)
+            : new Dictionary<string, object?>();
+
+        if (!metadata.ContainsKey("hand") && !string.IsNullOrEmpty(handEvent.Hand))
         {
-            ["hand"] = handEvent.Hand
-        };
+            metadata["hand"] = handEvent.Hand;
+        }
 
         return new AnalyticEvent(
             Id: handEvent.Id,

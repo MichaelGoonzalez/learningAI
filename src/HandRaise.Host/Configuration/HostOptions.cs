@@ -12,7 +12,16 @@ public sealed class HostOptions
     public TrackerOptions Tracker { get; init; } = new();
     public StorageOptions Storage { get; init; } = new();
     public StreamingOptions Streaming { get; init; } = new();
+    public NotificationOptions Notifications { get; init; } = new();
     public List<CameraOptions> Cameras { get; init; } = [];
+}
+
+public sealed class NotificationOptions
+{
+    public bool Enabled { get; init; } = true;
+    public bool AllowInsecureHttpWebhooks { get; init; } = true;
+    public bool EnableSsrfProtection { get; init; } = false;
+    public int DefaultTimeoutMs { get; init; } = 5000;
 }
 
 public sealed class StreamingOptions
@@ -95,6 +104,11 @@ public sealed class StorageOptions
     public string NodeCredentialStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/node-credentials.json";
     public string AnalyticStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/analytics.json";
     public string LinesStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/lines.json";
+    public string RulesStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/rules.json";
+    public string AlertsStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/alerts.json";
+    public string NotificationPoliciesStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/notification-policies.json";
+    public string NotificationDestinationsStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/notification-destinations.json";
+    public string NotificationAttemptsStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/notification-attempts.json";
     public int QueueCapacity { get; init; } = 256;
     public int BatchSize { get; init; } = 32;
     public double SnapshotMarginRatio { get; init; } = 0.1;

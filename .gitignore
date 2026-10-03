@@ -71,3 +71,5 @@ ehthumbs.db
 [Dd]esktop.ini
 $RECYCLE.BIN/
 
+.dotnet_cli/
+.dotnet_cli */

@@ -176,11 +176,50 @@ public sealed class LineManagementApiTests : IDisposable
             Name: "Person Counting Valid",
             Configuration: new Dictionary<string, object?>
             {
+                ["entry_direction"] = "a_to_b",
                 ["initial_occupancy"] = 0,
+                ["minimum_occupancy"] = 0,
                 ["maximum_occupancy"] = 100
             },
             AssignedLineIds: ["line-main"]));
         Assert.Equal(HttpStatusCode.Created, validPcResp.StatusCode);
+
+        // 6. Person Counting with invalid entry_direction returns 400
+        var invalidDirResp = await client.PostAsJsonAsync("/api/v1/cameras/cam-1/analytics", new CameraAnalyticWriteRequest(
+            Id: "an-pc-inv-dir",
+            AnalyticTypeId: "person_counting",
+            Name: "Person Counting Invalid Direction",
+            Configuration: new Dictionary<string, object?>
+            {
+                ["entry_direction"] = "diagonal_crossover"
+            },
+            AssignedLineIds: ["line-main"]));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidDirResp.StatusCode);
+    }
+
+    [Fact]
+    public async Task LineSerialization_MaintainsSnakeCaseWireFormat()
+    {
+        var line = new LineDefinition(
+            Id: "line-wire-test",
+            CameraId: "cam-1",
+            Name: "Test Wire",
+            PointA: new Point2D(0.25, 0.50),
+            PointB: new Point2D(0.75, 0.50),
+            DirectionMode: LineDirectionMode.AToB,
+            Enabled: true);
+
+        var json = JsonSerializer.Serialize(line, AnalyticJsonDefaults.Options);
+        Assert.Contains("\"camera_id\":", json);
+        Assert.Contains("\"point_a\":", json);
+        Assert.Contains("\"point_b\":", json);
+        Assert.Contains("\"direction_mode\":\"a_to_b\"", json);
+
+        var deserialized = JsonSerializer.Deserialize<LineDefinition>(json, AnalyticJsonDefaults.Options);
+        Assert.NotNull(deserialized);
+        Assert.Equal(LineDirectionMode.AToB, deserialized.DirectionMode);
+        Assert.Equal(0.25, deserialized.PointA.X);
+        Assert.Equal(0.50, deserialized.PointA.Y);
     }
 
     private WebApplication CreateApp() =>

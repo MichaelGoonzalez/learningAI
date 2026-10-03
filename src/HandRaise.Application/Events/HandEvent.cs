@@ -13,7 +13,8 @@ public sealed record HandEvent(
     [property: JsonPropertyName("timestamp")] DateTimeOffset Timestamp,
     [property: JsonPropertyName("snapshot_url")] string? SnapshotUrl = null,
     [property: JsonPropertyName("node_id")] string NodeId = "unknown",
-    [property: JsonPropertyName("site_id")] string SiteId = "unknown")
+    [property: JsonPropertyName("site_id")] string SiteId = "unknown",
+    [property: JsonPropertyName("metadata")] IReadOnlyDictionary<string, object?>? Metadata = null)
 {
     [JsonIgnore]
     public byte[]? SnapshotJpeg { get; init; }

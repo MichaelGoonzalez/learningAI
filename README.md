@@ -10,13 +10,14 @@ El código de producción es C#/.NET 10; `app/`, `tests/`, `config.yaml` y scrip
 
 ## Estado y roadmap
 
-Pruebas actuales: **255** (51 Domain, 111 Application, 33 Infrastructure.Windows, 60 Host), todas superadas en Release.
+Pruebas actuales: **317** (90 Domain, 125 Application, 38 Infrastructure.Windows, 64 Host), todas superadas en Release.
 
 | Bloque | Estado |
 |---|---|
 | C1–C9, D1–D2 | Base funcional de video, inferencia ONNX, tracking, persistencia SQLite, host headless y WPF. |
 | E0–E1.5 | Evolución camera-centric, fundación genérica multi-analítica y freeze de contrato v1. |
-| E2–E5 | Catálogo real (5 analíticas: `hand_raise`, `person_presence`, `zone_intrusion`, `line_crossing`, `person_counting`), líneas virtuales y coexistencia por cámara. |
+| E2–E5.5 | Catálogo real (5 analíticas: `hand_raise`, `person_presence`, `zone_intrusion`, `line_crossing`, `person_counting`), líneas virtuales (`lines.json`), freeze contractual (`SPATIAL_LINES_API_CONTRACT_V1.md`) y coexistencia. |
+| E6–E7 | Rules Engine, Alertas Operacionales y Notificaciones (`AlertRule`, `RuleEngine`, `NotificationPolicy`, `NotificationDestination`, Webhook HTTP, MQTT v3.1.1, `rules.json`, `alerts.json`, `notification-*.json`, `NOTIFICATIONS_API_CONTRACT_V1.md`). |
 | D2b pendiente | WebSocket de eventos/métricas y MJPEG; aceptar con reconexión y clientes simultáneos sin bloquear inferencia. |
 | D3 pendiente | Manifest/modelos v2 e importación/activar/revertir; aceptar cambio seguro y validación de hash/licencia. |
 | D4 pendiente | Módulos PackageCounting/ConveyorFlow; aceptar conteos deterministas con secuencias sintéticas. |
@@ -58,6 +59,14 @@ Auth: lecturas requieren API key si está configurada; sin clave solo aceptan lo
 | GET/PUT/DELETE | `/cameras/{id}/analytics/{instanceId}` | lectura/escritura | Consultar, actualizar configuración o eliminar analítica. |
 | GET/POST/PUT | `/cameras/{id}/lines` | lectura/escritura | Listar, crear o actualizar líneas virtuales por cámara. |
 | DELETE | `/cameras/{id}/lines/{lineId}` | escritura | Eliminar línea virtual. |
+| GET/POST | `/cameras/{id}/analytics/{instanceId}/rules` | lectura/escritura | Listar o crear reglas de alerta por instancia analítica. |
+| GET/PUT/DELETE | `/cameras/{id}/analytics/{instanceId}/rules/{ruleId}` | lectura/escritura | Consultar, actualizar o eliminar regla de alerta. |
+| GET | `/alerts`, `/alerts/{id}` | lectura | Consultar historial de alertas (filtros por severidad, estado, etc.). |
+| POST | `/alerts/{id}/acknowledge`, `/alerts/{id}/resolve` | escritura | Reconocer o resolver alerta operativa. |
+| GET/POST/PUT/DELETE | `/notifications/destinations`, `/{id}` | lectura/escritura | CRUD de destinos de notificación (Webhook/MQTT, secretos redactados). |
+| POST | `/notifications/destinations/{id}/test` | escritura | Probar entrega de notificación a un destino. |
+| GET/POST/PUT/DELETE | `/notifications/policies`, `/{id}` | lectura/escritura | CRUD de políticas de enrutamiento de notificaciones. |
+| GET | `/notifications/attempts` | lectura | Consultar auditoría de intentos de entrega de notificaciones. |
 | POST | `/cameras/{id}/start`, `/cameras/{id}/stop` | escritura | Habilitar e iniciar/detener. |
 | POST | `/cameras/test` | escritura | Probar fuente con timeout. |
 | GET | `/cameras/{id}/snapshot` | lectura | Último frame JPEG. |
@@ -74,7 +83,7 @@ Configuración principal: `src/HandRaise.Host/appsettings.json` (`nodeId`, `site
 | Datos | Escritorio | Host/servicio |
 |---|---|---|
 | DB/snapshots | `%LOCALAPPDATA%\HandRaiseDetection\events.db` y `snapshots\` | Igual, bajo el perfil de la cuenta que ejecuta el proceso. |
-| Zonas / Líneas | `zones.json` | `cameras.json` (zonas), `lines.json` (líneas virtuales). |
+| Zonas / Líneas / Reglas | `zones.json` | `cameras.json` (zonas), `lines.json` (líneas), `rules.json` (reglas), `alerts.json` (alertas), `notification-*.json` (políticas, destinos, intentos). |
 | Cámaras/credenciales | `node-credentials.json` (DPAPI máquina) y config WPF | `cameras.json`, `camera-credentials.json` y `node-credentials.json` (DPAPI máquina). |
 | Logs | `%LOCALAPPDATA%\HandRaiseDetection\logs\` | Igual, bajo el perfil de la cuenta de servicio. |
 

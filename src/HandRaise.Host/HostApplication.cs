@@ -4,12 +4,17 @@ using System.Text.Json;
 using System.Threading.Channels;
 using HandRaise.Application.Analytics;
 using HandRaise.Application.Events;
+using HandRaise.Application.Notifications;
 using HandRaise.Application.Pipelines;
+using HandRaise.Application.Rules;
 using HandRaise.Application.Storage;
 using HandRaise.Domain.Analytics;
+using HandRaise.Domain.Notifications;
+using HandRaise.Domain.Rules;
 using HandRaise.Host.Api;
 using HandRaise.Host.Configuration;
 using HandRaise.Host.Services;
+using HandRaise.Infrastructure.Windows.Notifications;
 using HandRaise.Infrastructure.Windows.Storage;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,6 +55,44 @@ public static class HostApplication
             builder.Services.AddSingleton<IAnalyticManagementService, AnalyticManagementService>();
         if (!builder.Services.Any(item => item.ServiceType == typeof(HandRaise.Application.Lines.ILineStore)))
             builder.Services.AddSingleton<HandRaise.Application.Lines.ILineStore>(_ => new JsonLineStore(options.Storage.LinesStorePath));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IRuleStore)))
+            builder.Services.AddSingleton<IRuleStore>(_ => new JsonRuleStore(options.Storage.RulesStorePath));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IRuleProvider)))
+            builder.Services.AddSingleton<IRuleProvider>(sp => sp.GetRequiredService<IRuleStore>());
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IAlertStore)))
+            builder.Services.AddSingleton<IAlertStore>(_ => new JsonAlertStore(options.Storage.AlertsStorePath));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IRuleEngine)))
+            builder.Services.AddSingleton<IRuleEngine>(sp => new RuleEngine(
+                sp.GetRequiredService<IRuleProvider>(),
+                sp.GetRequiredService<IAlertStore>()));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(INotificationDestinationStore)))
+            builder.Services.AddSingleton<INotificationDestinationStore>(_ => new JsonNotificationDestinationStore(options.Storage.NotificationDestinationsStorePath));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(INotificationPolicyStore)))
+            builder.Services.AddSingleton<INotificationPolicyStore>(_ => new JsonNotificationPolicyStore(options.Storage.NotificationPoliciesStorePath));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(INotificationAttemptStore)))
+            builder.Services.AddSingleton<INotificationAttemptStore>(_ => new JsonNotificationAttemptStore(options.Storage.NotificationAttemptsStorePath));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(INotificationDispatcher)))
+        {
+            builder.Services.AddSingleton<INotificationDispatcher>(sp =>
+            {
+                var senders = new INotificationSender[]
+                {
+                    new HttpWebhookNotificationSender(
+                        httpClient: null,
+                        allowInsecureHttp: options.Notifications.AllowInsecureHttpWebhooks,
+                        enableSsrfCheck: options.Notifications.EnableSsrfProtection),
+                    new MqttNotificationSender()
+                };
+                return new NotificationDispatcher(
+                    sp.GetRequiredService<INotificationPolicyStore>(),
+                    sp.GetRequiredService<INotificationDestinationStore>(),
+                    sp.GetRequiredService<INotificationAttemptStore>(),
+                    senders,
+                    options.NodeId,
+                    options.SiteId);
+            });
+        }
+        builder.Services.AddHostedService<AlertEngineWorker>();
         if (!builder.Services.Any(item => item.ServiceType == typeof(ICameraStore)))
             builder.Services.AddSingleton<ICameraStore>(_ => new JsonCameraStore(options.Storage.CameraStorePath));
         if (!builder.Services.Any(item => item.ServiceType == typeof(ICameraCredentialStore)))
@@ -279,6 +322,55 @@ public static class HostApplication
                 ? Results.NoContent()
                 : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Línea no encontrada");
         });
+
+        // Rules CRUD endpoints
+        api.MapGet("/cameras/{cameraId}/analytics/{instanceId}/rules", async (
+            string cameraId, string instanceId, IRuleStore ruleStore, CancellationToken token) =>
+            Results.Ok(await ruleStore.ListByInstanceAsync(cameraId, instanceId, token)));
+
+        api.MapPost("/cameras/{cameraId}/analytics/{instanceId}/rules", async (
+            string cameraId, string instanceId, AlertRule rule, IRuleStore ruleStore, CancellationToken token) =>
+        {
+            try
+            {
+                var adjusted = rule with { CameraId = cameraId, AnalyticInstanceId = instanceId };
+                adjusted.Validate();
+                var saved = await ruleStore.SaveAsync(adjusted, token);
+                return Results.Created($"/api/v1/cameras/{cameraId}/analytics/{instanceId}/rules/{saved.Id}", saved);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Regla inválida", detail: ex.Message);
+            }
+        });
+
+        api.MapGet("/cameras/{cameraId}/analytics/{instanceId}/rules/{ruleId}", async (
+            string cameraId, string instanceId, string ruleId, IRuleStore ruleStore, CancellationToken token) =>
+            await ruleStore.GetByIdAsync(cameraId, instanceId, ruleId, token) is { } foundRule
+                ? Results.Ok(foundRule)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Regla no encontrada"));
+
+        api.MapPut("/cameras/{cameraId}/analytics/{instanceId}/rules/{ruleId}", async (
+            string cameraId, string instanceId, string ruleId, AlertRule rule, IRuleStore ruleStore, CancellationToken token) =>
+        {
+            try
+            {
+                var adjusted = rule with { Id = ruleId, CameraId = cameraId, AnalyticInstanceId = instanceId };
+                adjusted.Validate();
+                var saved = await ruleStore.SaveAsync(adjusted, token);
+                return Results.Ok(saved);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Regla inválida", detail: ex.Message);
+            }
+        });
+
+        api.MapDelete("/cameras/{cameraId}/analytics/{instanceId}/rules/{ruleId}", async (
+            string cameraId, string instanceId, string ruleId, IRuleStore ruleStore, CancellationToken token) =>
+            await ruleStore.DeleteAsync(cameraId, instanceId, ruleId, token)
+                ? Results.NoContent()
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Regla no encontrada"));
         api.MapGet("/cameras/{id}/snapshot", async (string id, ICameraManagementService service, CancellationToken token) =>
             await service.GetSnapshotAsync(id, token) is { } jpeg
                 ? Results.File(jpeg, "image/jpeg")
@@ -579,5 +671,207 @@ public static class HostApplication
             CancellationToken token) =>
             Results.Ok(await service.StatisticsAsync(
                 new EventQuery(camera, zone, type, from, to, 1000, 0), token)));
+
+        // Alerts endpoints
+        api.MapGet("/alerts", async (
+            IAlertStore alertStore,
+            string? camera_id,
+            string? analytic_instance_id,
+            string? severity,
+            string? status,
+            DateTimeOffset? from,
+            DateTimeOffset? to,
+            int limit = 100,
+            int offset = 0,
+            CancellationToken token = default) =>
+        {
+            AlertSeverity? parsedSeverity = null;
+            if (!string.IsNullOrWhiteSpace(severity) && Enum.TryParse<AlertSeverity>(severity, ignoreCase: true, out var sev))
+            {
+                parsedSeverity = sev;
+            }
+
+            AlertStatus? parsedStatus = null;
+            if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<AlertStatus>(status, ignoreCase: true, out var st))
+            {
+                parsedStatus = st;
+            }
+
+            var query = new AlertQuery(
+                CameraId: camera_id,
+                AnalyticInstanceId: analytic_instance_id,
+                Severity: parsedSeverity,
+                Status: parsedStatus,
+                From: from,
+                To: to,
+                Limit: limit,
+                Offset: offset);
+
+            var items = await alertStore.QueryAsync(query, token);
+            return Results.Ok(items);
+        });
+
+        api.MapGet("/alerts/{alertId}", async (
+            string alertId, IAlertStore alertStore, CancellationToken token) =>
+            await alertStore.GetByIdAsync(alertId, token) is { } alert
+                ? Results.Ok(alert)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Alerta no encontrada"));
+
+        api.MapPost("/alerts/{alertId}/acknowledge", async (
+            string alertId, IAlertStore alertStore, CancellationToken token) =>
+            await alertStore.AcknowledgeAsync(alertId, DateTimeOffset.UtcNow, token) is { } alert
+                ? Results.Ok(alert)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Alerta no encontrada"));
+
+        api.MapPost("/alerts/{alertId}/resolve", async (
+            string alertId, IAlertStore alertStore, CancellationToken token) =>
+            await alertStore.ResolveAsync(alertId, DateTimeOffset.UtcNow, token) is { } alert
+                ? Results.Ok(alert)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Alerta no encontrada"));
+
+        // Notification Destinations CRUD endpoints
+        api.MapGet("/notifications/destinations", async (
+            INotificationDestinationStore destinationStore, CancellationToken token) =>
+        {
+            var items = await destinationStore.ListAllAsync(token);
+            return Results.Ok(items.Select(JsonNotificationDestinationStore.Redact));
+        });
+
+        api.MapPost("/notifications/destinations", async (
+            NotificationDestination destination, INotificationDestinationStore destinationStore, CancellationToken token) =>
+        {
+            try
+            {
+                destination.Validate();
+                var saved = await destinationStore.SaveAsync(destination, token);
+                return Results.Created($"/api/v1/notifications/destinations/{saved.Id}", JsonNotificationDestinationStore.Redact(saved));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Destino inválido", detail: ex.Message);
+            }
+        });
+
+        api.MapGet("/notifications/destinations/{id}", async (
+            string id, INotificationDestinationStore destinationStore, CancellationToken token) =>
+            await destinationStore.GetByIdAsync(id, token) is { } dest
+                ? Results.Ok(JsonNotificationDestinationStore.Redact(dest))
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Destino no encontrado"));
+
+        api.MapPut("/notifications/destinations/{id}", async (
+            string id, NotificationDestination destination, INotificationDestinationStore destinationStore, CancellationToken token) =>
+        {
+            try
+            {
+                var existing = await destinationStore.GetByIdAsync(id, token);
+                if (existing is null)
+                    return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Destino no encontrado");
+
+                var adjusted = destination with { Id = id };
+                adjusted.Validate();
+                var saved = await destinationStore.SaveAsync(adjusted, token);
+                return Results.Ok(JsonNotificationDestinationStore.Redact(saved));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Destino inválido", detail: ex.Message);
+            }
+        });
+
+        api.MapDelete("/notifications/destinations/{id}", async (
+            string id, INotificationDestinationStore destinationStore, CancellationToken token) =>
+            await destinationStore.DeleteAsync(id, token)
+                ? Results.NoContent()
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Destino no encontrado"));
+
+        api.MapPost("/notifications/destinations/{id}/test", async (
+            string id, INotificationDestinationStore destinationStore, INotificationDispatcher dispatcher, CancellationToken token) =>
+        {
+            var destination = await destinationStore.GetByIdAsync(id, token);
+            if (destination is null)
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Destino no encontrado");
+
+            var attempt = await dispatcher.TestDestinationAsync(destination, token);
+            return Results.Ok(attempt);
+        });
+
+        // Notification Policies CRUD endpoints
+        api.MapGet("/notifications/policies", async (
+            INotificationPolicyStore policyStore, CancellationToken token) =>
+            Results.Ok(await policyStore.ListAllAsync(token)));
+
+        api.MapPost("/notifications/policies", async (
+            NotificationPolicy policy, INotificationPolicyStore policyStore, CancellationToken token) =>
+        {
+            try
+            {
+                policy.Validate();
+                var saved = await policyStore.SaveAsync(policy, token);
+                return Results.Created($"/api/v1/notifications/policies/{saved.Id}", saved);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Política inválida", detail: ex.Message);
+            }
+        });
+
+        api.MapGet("/notifications/policies/{id}", async (
+            string id, INotificationPolicyStore policyStore, CancellationToken token) =>
+            await policyStore.GetByIdAsync(id, token) is { } p
+                ? Results.Ok(p)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Política no encontrada"));
+
+        api.MapPut("/notifications/policies/{id}", async (
+            string id, NotificationPolicy policy, INotificationPolicyStore policyStore, CancellationToken token) =>
+        {
+            try
+            {
+                var existing = await policyStore.GetByIdAsync(id, token);
+                if (existing is null)
+                    return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Política no encontrada");
+
+                var adjusted = policy with { Id = id };
+                adjusted.Validate();
+                var saved = await policyStore.SaveAsync(adjusted, token);
+                return Results.Ok(saved);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Política inválida", detail: ex.Message);
+            }
+        });
+
+        api.MapDelete("/notifications/policies/{id}", async (
+            string id, INotificationPolicyStore policyStore, CancellationToken token) =>
+            await policyStore.DeleteAsync(id, token)
+                ? Results.NoContent()
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Política no encontrada"));
+
+        // Notification Attempts query endpoint
+        api.MapGet("/notifications/attempts", async (
+            INotificationAttemptStore attemptStore,
+            string? alert_id,
+            string? destination_id,
+            string? status,
+            int limit = 100,
+            int offset = 0,
+            CancellationToken token = default) =>
+        {
+            NotificationStatus? parsedStatus = null;
+            if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<NotificationStatus>(status, ignoreCase: true, out var st))
+            {
+                parsedStatus = st;
+            }
+
+            var query = new NotificationAttemptQuery(
+                AlertId: alert_id,
+                DestinationId: destination_id,
+                Status: parsedStatus,
+                Limit: limit,
+                Offset: offset);
+
+            var items = await attemptStore.QueryAsync(query, token);
+            return Results.Ok(items);
+        });
     }
 }
