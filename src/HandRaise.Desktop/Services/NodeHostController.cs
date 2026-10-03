@@ -52,6 +52,16 @@ public sealed class NodeHostController : IAsyncDisposable
     public ICameraManagementService? CameraService => _app?.Services.GetService<ICameraManagementService>();
     public IHandEventRepository? EventRepository => _app?.Services.GetService<IHandEventRepository>();
     public HandEventBus? EventBus => _app?.Services.GetService<HandEventBus>();
+    public INodeCredentialStore? CredentialStore => _app?.Services.GetService<INodeCredentialStore>();
+
+    public void UpdateApiKey(string newKey)
+    {
+        _currentSettings = _currentSettings with { ApiKey = newKey };
+        if (_app?.Services.GetService<ApiOptions>() is { } apiOptions)
+        {
+            apiOptions.ApiKey = newKey;
+        }
+    }
 
     public event Action<NodeHostStatus, string>? StatusChanged;
 

@@ -34,8 +34,8 @@ public sealed class ApiOptions
     public int Port { get; init; } = 5080;
     public string BindAddress { get; init; } = "127.0.0.1";
     public string ApiKeyHeader { get; init; } = "X-Api-Key";
-    public string? ApiKey { get; init; }
-    public string[] AllowedOrigins { get; init; } = [];
+    public string? ApiKey { get; set; }
+    public string[] AllowedOrigins { get; init; } = ["https://vision-control-module.ai.studio"];
 }
 
 public sealed class ModelOptions
@@ -92,6 +92,9 @@ public sealed class StorageOptions
     public string SnapshotDirectory { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/snapshots";
     public string CameraStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/cameras.json";
     public string CameraCredentialStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/camera-credentials.json";
+    public string NodeCredentialStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/node-credentials.json";
+    public string AnalyticStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/analytics.json";
+    public string LinesStorePath { get; init; } = "%LOCALAPPDATA%/HandRaiseDetection/lines.json";
     public int QueueCapacity { get; init; } = 256;
     public int BatchSize { get; init; } = 32;
     public double SnapshotMarginRatio { get; init; } = 0.1;

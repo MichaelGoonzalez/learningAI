@@ -1,48 +1,40 @@
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Channels;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using HandRaise.Application.Capture;
-using HandRaise.Application.Events;
-using HandRaise.Application.Inference;
-using HandRaise.Application.Pipelines;
-using HandRaise.Application.Storage;
-using HandRaise.Application.Tracking;
-using HandRaise.Desktop.Configuration;
-using HandRaise.Infrastructure.Windows.Capture;
-using HandRaise.Infrastructure.Windows.Overlay;
-using HandRaise.Infrastructure.Windows.Storage;
 using HandRaise.Application.Zones;
+using HandRaise.Host.Services;
 
 namespace HandRaise.Desktop.ViewModels;
 
 public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
 {
-    private readonly CameraSettings _camera;
-    private readonly DesktopConfiguration _configuration;
-    private readonly IInferenceBackend _backend;
-    private readonly HandEventBus _eventBus;
-    private readonly IZoneSettingsStore _zoneStore;
-    private readonly AtomicZoneProvider _zoneProvider;
-    private readonly Func<long> _backendGeneration;
+    private readonly ICameraManagementService _cameraService;
     private readonly Dispatcher _dispatcher;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
-    private CancellationTokenSource? _sessionCancellation;
-    private IVideoSource? _source;
-    private Task? _pipelineTask;
-    private Task? _renderTask;
-    private Task? _watchdogTask;
-    private WriteableBitmap? _videoImage;
+
+    private readonly string _id;
+    private string _name;
+    private string _source;
+    private readonly bool _autoStart;
+
+    private CancellationTokenSource? _streamCancellation;
+    private Task? _streamTask;
+    private IAsyncDisposable? _subscription;
+
+    private ImageSource? _videoImage;
     private string _status = "Desconectada";
     private string? _error;
     private double _framesPerSecond;
     private bool _isRunning;
-    private long _lastFrameTicks;
+    private bool _isStreaming;
     private int _frameWidth;
     private int _frameHeight;
+
     private bool _zonesInitialized;
     private bool _isEditingZones;
     private string _zoneName = string.Empty;
@@ -54,24 +46,19 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     private bool _dragSnapshotTaken;
 
     public CameraViewModel(
-        CameraSettings camera,
-        DesktopConfiguration configuration,
-        IInferenceBackend backend,
-        HandEventBus eventBus,
-        IZoneSettingsStore zoneStore,
-        Func<long> backendGeneration,
+        CameraView camera,
+        ICameraManagementService cameraService,
         Dispatcher dispatcher)
     {
-        _camera = camera;
-        _configuration = configuration;
-        _backend = backend;
-        _eventBus = eventBus;
-        _zoneStore = zoneStore;
-        _zoneProvider = new AtomicZoneProvider(
-            camera.Zones,
-            string.Equals(camera.ZonesCoordinateSpace, "normalized", StringComparison.OrdinalIgnoreCase));
-        _backendGeneration = backendGeneration;
+        _id = camera.Id;
+        _name = camera.Name;
+        _source = camera.Source;
+        _autoStart = camera.Enabled;
+        _cameraService = cameraService;
         _dispatcher = dispatcher;
+
+        UpdateFromView(camera);
+
         ToggleCommand = new AsyncRelayCommand(ToggleAsync);
         ToggleZoneEditorCommand = new RelayCommand(ToggleZoneEditor);
         CloseZoneCommand = new AsyncRelayCommand(CloseZoneAsync);
@@ -80,11 +67,33 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         NewZoneCommand = new RelayCommand(StartNewZone);
     }
 
-    public string Id => _camera.Id;
-    public string Name => _camera.Name;
-    public string SourceDescription => SanitizeSource(_camera.Source);
+    public string Id => _id;
+    public string Name { get => _name; private set => SetProperty(ref _name, value); }
+    public string SourceDescription => SanitizeSource(_source);
+    public bool AutoStart => _autoStart;
+
+    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string? Error { get => _error; private set => SetProperty(ref _error, value); }
+    public double FramesPerSecond { get => _framesPerSecond; private set => SetProperty(ref _framesPerSecond, value); }
+    public ImageSource? VideoImage { get => _videoImage; private set => SetProperty(ref _videoImage, value); }
+    public int FrameWidth { get => _frameWidth; private set => SetProperty(ref _frameWidth, value); }
+    public int FrameHeight { get => _frameHeight; private set => SetProperty(ref _frameHeight, value); }
+
+    public bool IsRunning
+    {
+        get => _isRunning;
+        private set
+        {
+            if (SetProperty(ref _isRunning, value))
+            {
+                OnPropertyChanged(nameof(ButtonText));
+            }
+        }
+    }
+
+    public string ButtonText => IsRunning ? "Detener" : "Iniciar";
     public IAsyncRelayCommand ToggleCommand { get; }
-    public bool AutoStart => _camera.Enabled;
+
     public IRelayCommand ToggleZoneEditorCommand { get; }
     public IAsyncRelayCommand CloseZoneCommand { get; }
     public IAsyncRelayCommand UndoZoneCommand { get; }
@@ -94,7 +103,13 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     public bool IsEditingZones
     {
         get => _isEditingZones;
-        private set { if (SetProperty(ref _isEditingZones, value)) OnPropertyChanged(nameof(ZoneEditorButtonText)); }
+        private set
+        {
+            if (SetProperty(ref _isEditingZones, value))
+            {
+                OnPropertyChanged(nameof(ZoneEditorButtonText));
+            }
+        }
     }
 
     public string ZoneEditorButtonText => IsEditingZones ? "Salir del editor" : "Editar zonas";
@@ -105,17 +120,233 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     public NormalizedZone? SelectedZone
     {
         get => _selectedZone;
-        set { if (SetProperty(ref _selectedZone, value) && value is not null) ZoneName = value.Name; }
+        set
+        {
+            if (SetProperty(ref _selectedZone, value) && value is not null)
+            {
+                ZoneName = value.Name;
+            }
+        }
+    }
+
+    public void UpdateFromView(CameraView view)
+    {
+        Name = view.Name;
+        _source = view.Source;
+        OnPropertyChanged(nameof(SourceDescription));
+
+        IsRunning = view.Running;
+        if (!_isStreaming)
+        {
+            Status = view.Running
+                ? (view.Online ? "En línea" : "Conectando...")
+                : "Desconectada";
+        }
+
+        if (view.Error is not null)
+        {
+            Error = view.Error;
+        }
+        else if (view.Online)
+        {
+            Error = null;
+        }
+
+        if (!_isStreaming || FramesPerSecond == 0)
+        {
+            FramesPerSecond = view.FramesPerSecond;
+        }
+    }
+
+    public async Task StartAsync()
+    {
+        await _lifecycle.WaitAsync();
+        try
+        {
+            if (_isStreaming) return;
+            _isStreaming = true;
+            IsRunning = true;
+            Status = "Conectando...";
+            Error = null;
+            _streamCancellation = new CancellationTokenSource();
+            _streamTask = Task.Run(() => StreamLoopAsync(_streamCancellation.Token));
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    public async Task StopStreamingAsync()
+    {
+        await _lifecycle.WaitAsync();
+        try
+        {
+            if (!_isStreaming) return;
+            _isStreaming = false;
+            _streamCancellation?.Cancel();
+            if (_streamTask is not null)
+            {
+                try { await _streamTask; } catch (OperationCanceledException) { }
+            }
+            if (_subscription is not null)
+            {
+                try { await _subscription.DisposeAsync(); } catch { }
+                _subscription = null;
+            }
+            _streamCancellation?.Dispose();
+            _streamCancellation = null;
+            _streamTask = null;
+            FramesPerSecond = 0;
+            VideoImage = null;
+            Status = "Desconectada";
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        try
+        {
+            if (IsRunning)
+            {
+                await _cameraService.StopAsync(Id);
+                await StopStreamingAsync();
+                IsRunning = false;
+            }
+            else
+            {
+                await _cameraService.StartAsync(Id);
+                IsRunning = true;
+                await StartAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
+    }
+
+    private async Task StreamLoopAsync(CancellationToken token)
+    {
+        var frameCount = 0;
+        var fpsStopwatch = Stopwatch.StartNew();
+
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                var subResult = await _cameraService.SubscribeStreamAsync(Id, fps: 30, quality: 75, token);
+                if (subResult.Status == CameraStreamStatus.Success && subResult.Reader is not null)
+                {
+                    _subscription = subResult.Subscription;
+                    await _dispatcher.InvokeAsync(() =>
+                    {
+                        Status = "En línea";
+                        Error = null;
+                    });
+
+                    await foreach (var jpeg in subResult.Reader.ReadAllAsync(token))
+                    {
+                        try
+                        {
+                            var bitmap = DecodeJpeg(jpeg);
+                            frameCount++;
+                            if (fpsStopwatch.ElapsedMilliseconds >= 1000)
+                            {
+                                var currentFps = frameCount * 1000.0 / fpsStopwatch.ElapsedMilliseconds;
+                                frameCount = 0;
+                                fpsStopwatch.Restart();
+                                await _dispatcher.InvokeAsync(() => FramesPerSecond = Math.Round(currentFps, 1));
+                            }
+
+                            await _dispatcher.InvokeAsync(() =>
+                            {
+                                VideoImage = bitmap;
+                                FrameWidth = bitmap.PixelWidth;
+                                FrameHeight = bitmap.PixelHeight;
+                                Status = "En línea";
+                                Error = null;
+                            });
+                        }
+                        catch
+                        {
+                            // Ignorar frame corrupto
+                        }
+                    }
+                }
+                else
+                {
+                    await _dispatcher.InvokeAsync(() =>
+                    {
+                        Status = subResult.Status switch
+                        {
+                            CameraStreamStatus.LimitReached => "Límite de clientes alcanzado",
+                            CameraStreamStatus.NotFound => "Cámara no encontrada",
+                            _ => "Esperando video..."
+                        };
+                        if (subResult.Error is not null) Error = subResult.Error;
+                    });
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                await _dispatcher.InvokeAsync(() =>
+                {
+                    Status = "Sin señal / reconectando";
+                    Error = ex.Message;
+                });
+            }
+            finally
+            {
+                if (_subscription is not null)
+                {
+                    try { await _subscription.DisposeAsync(); } catch { }
+                    _subscription = null;
+                }
+            }
+
+            if (!token.IsCancellationRequested)
+            {
+                await Task.Delay(1000, token);
+            }
+        }
+    }
+
+    private static BitmapSource DecodeJpeg(byte[] bytes)
+    {
+        using var stream = new MemoryStream(bytes);
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        return bitmap;
     }
 
     public async Task InitializeZonesAsync()
     {
-        var saved = await _zoneStore.LoadAsync(Id);
-        if (saved is not null)
+        if (_zonesInitialized) return;
+        try
         {
-            _zoneProvider.Replace(saved);
-            EditorZones = saved;
-            _zonesInitialized = true;
+            var saved = await _cameraService.GetZonesAsync(Id);
+            if (saved is not null)
+            {
+                EditorZones = saved;
+                _zonesInitialized = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            ZoneMessage = $"Error al cargar zonas: {ex.Message}";
         }
     }
 
@@ -145,300 +376,18 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         zones[zoneIndex] = zones[zoneIndex] with { Points = points };
         try
         {
-            _zoneProvider.Replace(zones);
             EditorZones = zones;
             SelectedZone = zones[zoneIndex];
-            ZoneMessage = null;
         }
-        catch (ArgumentException exception)
+        catch
         {
-            ZoneMessage = exception.Message;
         }
     }
 
     public async Task EndZonePointDragAsync()
     {
-        if (!_dragSnapshotTaken) return;
         _dragSnapshotTaken = false;
-        try
-        {
-            ZoneEditorLogic.Validate(EditorZones);
-            await SaveZonesAsync();
-        }
-        catch (ArgumentException exception)
-        {
-            var previous = _zoneHistory.Pop();
-            ApplyZones(previous);
-            ZoneMessage = exception.Message;
-        }
-    }
-
-    public WriteableBitmap? VideoImage
-    {
-        get => _videoImage;
-        private set => SetProperty(ref _videoImage, value);
-    }
-
-    public string Status
-    {
-        get => _status;
-        private set => SetProperty(ref _status, value);
-    }
-
-    public string? Error
-    {
-        get => _error;
-        private set => SetProperty(ref _error, value);
-    }
-
-    public double FramesPerSecond
-    {
-        get => _framesPerSecond;
-        private set => SetProperty(ref _framesPerSecond, value);
-    }
-
-    public int FrameWidth => _frameWidth;
-    public int FrameHeight => _frameHeight;
-
-    public bool IsRunning
-    {
-        get => _isRunning;
-        private set
-        {
-            if (SetProperty(ref _isRunning, value))
-            {
-                OnPropertyChanged(nameof(ButtonText));
-            }
-        }
-    }
-
-    public string ButtonText => IsRunning ? "Detener" : "Iniciar";
-
-    public async Task StartAsync()
-    {
-        await _lifecycle.WaitAsync();
-        try
-        {
-            if (IsRunning)
-            {
-                return;
-            }
-
-            Error = null;
-            Status = "Conectando";
-            IsRunning = true;
-            _sessionCancellation = new CancellationTokenSource();
-            _source = CreateSource();
-            var frames = Channel.CreateBounded<UiFrame>(new BoundedChannelOptions(1)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
-                SingleWriter = true,
-                AllowSynchronousContinuations = false
-            });
-            var pipeline = new CameraPipeline(
-                _camera.Id,
-                _source,
-                _backend,
-                new OpenCvOverlayRenderer(_configuration.Hands.KeypointConfidence),
-                _configuration.CreateDetectionOptions(),
-                _camera.Zones,
-                _configuration.Model.Name,
-                new ByteTracker(_configuration.CreateTrackerOptions()),
-                eventPublisher: _eventBus,
-                backendGeneration: _backendGeneration,
-                snapshotEncoder: new OpenCvPersonSnapshotEncoder(),
-                snapshotOptions: _configuration.CreateSnapshotEncodingOptions(),
-                log: message => SetError(message),
-                zoneProvider: _zoneProvider);
-            _lastFrameTicks = Stopwatch.GetTimestamp();
-            _pipelineTask = Task.Run(() => RunPipelineAsync(
-                pipeline, frames, _sessionCancellation.Token));
-            _renderTask = Task.Run(() => RenderFramesAsync(frames.Reader, _sessionCancellation.Token));
-            _watchdogTask = Task.Run(() => WatchStatusAsync(_sessionCancellation.Token));
-        }
-        catch
-        {
-            IsRunning = false;
-            Status = "Desconectada";
-            throw;
-        }
-        finally
-        {
-            _lifecycle.Release();
-        }
-    }
-
-    public async Task StopAsync()
-    {
-        await _lifecycle.WaitAsync();
-        try
-        {
-            if (!IsRunning)
-            {
-                return;
-            }
-
-            _sessionCancellation?.Cancel();
-            var tasks = new[] { _pipelineTask, _renderTask, _watchdogTask }
-                .Where(task => task is not null)
-                .Cast<Task>();
-            try
-            {
-                await Task.WhenAll(tasks);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-
-            if (_source is not null)
-            {
-                await _source.DisposeAsync();
-            }
-
-            _sessionCancellation?.Dispose();
-            _sessionCancellation = null;
-            _source = null;
-            _pipelineTask = null;
-            _renderTask = null;
-            _watchdogTask = null;
-            IsRunning = false;
-            FramesPerSecond = 0;
-            Status = "Desconectada";
-        }
-        finally
-        {
-            _lifecycle.Release();
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await StopAsync();
-        _lifecycle.Dispose();
-    }
-
-    private async Task ToggleAsync()
-    {
-        try
-        {
-            if (IsRunning)
-            {
-                await StopAsync();
-            }
-            else
-            {
-                await StartAsync();
-            }
-        }
-        catch (Exception exception)
-        {
-            SetError(exception.Message);
-        }
-    }
-
-    private async Task RunPipelineAsync(
-        CameraPipeline pipeline,
-        Channel<UiFrame> frames,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var result in pipeline.RunAsync(cancellationToken))
-            {
-                using (result)
-                {
-                    var frame = new UiFrame(
-                        result.Frame.Width,
-                        result.Frame.Height,
-                        result.Frame.Pixels.ToArray(),
-                        result.Metrics.FramesPerSecond);
-                    if (!frames.Writer.TryWrite(frame))
-                    {
-                        frames.Reader.TryRead(out _);
-                        frames.Writer.TryWrite(frame);
-                    }
-
-                    Interlocked.Exchange(ref _lastFrameTicks, Stopwatch.GetTimestamp());
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            SetError(exception.Message);
-        }
-        finally
-        {
-            frames.Writer.TryComplete();
-        }
-    }
-
-    private async Task RenderFramesAsync(
-        ChannelReader<UiFrame> frames,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var frame in frames.ReadAllAsync(cancellationToken))
-            {
-                await _dispatcher.InvokeAsync(() => Render(frame));
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-    }
-
-    private async Task WatchStatusAsync(CancellationToken cancellationToken)
-    {
-        var offlineAfter = TimeSpan.FromMilliseconds(
-            Math.Max(2000, _configuration.Capture.ReadTimeoutMs * 2));
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
-                if (Stopwatch.GetElapsedTime(Interlocked.Read(ref _lastFrameTicks)) > offlineAfter)
-                {
-                    await _dispatcher.InvokeAsync(() => Status = "Sin señal / reconectando");
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-    }
-
-    private void Render(UiFrame frame)
-    {
-        _frameWidth = frame.Width;
-        _frameHeight = frame.Height;
-        OnPropertyChanged(nameof(FrameWidth));
-        OnPropertyChanged(nameof(FrameHeight));
-        if (!_zonesInitialized)
-        {
-            EditorZones = _zoneProvider.GetNormalized(frame.Width, frame.Height);
-            _zoneProvider.Replace(EditorZones);
-            _zonesInitialized = true;
-        }
-        if (VideoImage is null || VideoImage.PixelWidth != frame.Width ||
-            VideoImage.PixelHeight != frame.Height)
-        {
-            VideoImage = new WriteableBitmap(
-                frame.Width, frame.Height, 96, 96, PixelFormats.Bgr24, null);
-        }
-
-        VideoImage.WritePixels(
-            new System.Windows.Int32Rect(0, 0, frame.Width, frame.Height),
-            frame.Pixels,
-            frame.Width * 3,
-            0);
-        FramesPerSecond = frame.FramesPerSecond;
-        Status = "En línea";
-        Error = null;
+        await SaveZonesAsync();
     }
 
     private void ToggleZoneEditor()
@@ -468,7 +417,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
             var zones = EditorZones.Append(candidate).ToArray();
             ZoneEditorLogic.Validate(zones);
             _zoneHistory.Push(CloneZones(EditorZones));
-            ApplyZones(zones);
+            EditorZones = CloneZones(zones);
             DraftPoints = [];
             SelectedZone = candidate;
             await SaveZonesAsync();
@@ -489,7 +438,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         }
         if (_zoneHistory.TryPop(out var previous))
         {
-            ApplyZones(previous);
+            EditorZones = CloneZones(previous);
             await SaveZonesAsync();
             ZoneMessage = "Cambio deshecho.";
         }
@@ -503,72 +452,35 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
             return;
         }
         _zoneHistory.Push(CloneZones(EditorZones));
-        ApplyZones(EditorZones.Where(zone => zone.Name != SelectedZone.Name).ToArray());
+        EditorZones = CloneZones(EditorZones.Where(zone => zone.Name != SelectedZone.Name).ToArray());
         SelectedZone = null;
         ZoneName = string.Empty;
         await SaveZonesAsync();
         ZoneMessage = "Zona borrada.";
     }
 
-    private void ApplyZones(IReadOnlyList<NormalizedZone> zones)
-    {
-        _zoneProvider.Replace(zones);
-        EditorZones = CloneZones(zones);
-    }
-
     private async Task SaveZonesAsync()
     {
         try
         {
-            await _zoneStore.SaveAsync(Id, EditorZones);
+            var success = await _cameraService.UpdateZonesAsync(Id, EditorZones);
+            if (success)
+            {
+                ZoneMessage = "Zonas guardadas correctamente.";
+            }
+            else
+            {
+                ZoneMessage = "No fue posible guardar las zonas en el servicio.";
+            }
         }
         catch (Exception exception)
         {
-            ZoneMessage = $"Las zonas se aplicaron, pero no se pudieron guardar: {exception.Message}";
+            ZoneMessage = $"Error al guardar zonas: {exception.Message}";
         }
     }
 
     private static IReadOnlyList<NormalizedZone> CloneZones(IReadOnlyList<NormalizedZone> zones) =>
         zones.Select(zone => new NormalizedZone(zone.Name, zone.Points.ToArray())).ToArray();
-
-    private IVideoSource CreateSource()
-    {
-        var options = _configuration.CreateCaptureOptions(_camera.Loop);
-        Action<string> log = HandleCaptureLog;
-        if (int.TryParse(_camera.Source, out var index))
-        {
-            return new WebcamVideoSource(index, options, log);
-        }
-
-        if (_camera.Source.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
-        {
-            return new RtspVideoSource(_camera.Source, options, log);
-        }
-
-        return new FileVideoSource(_camera.Source, options);
-    }
-
-    private void SetError(string message) => _dispatcher.BeginInvoke(() =>
-    {
-        Error = message;
-        Status = "Fuera de línea";
-    });
-
-    private void HandleCaptureLog(string message) => _dispatcher.BeginInvoke(() =>
-    {
-        if (message.Contains("conectada", StringComparison.OrdinalIgnoreCase))
-        {
-            Status = "En línea";
-            Error = null;
-        }
-        else if (message.Contains("perdió", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("reintentar", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("timeout", StringComparison.OrdinalIgnoreCase))
-        {
-            Status = "Sin señal / reconectando";
-            Error = message;
-        }
-    });
 
     private static string SanitizeSource(string source)
     {
@@ -588,5 +500,9 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private sealed record UiFrame(int Width, int Height, byte[] Pixels, double FramesPerSecond);
+    public async ValueTask DisposeAsync()
+    {
+        await StopStreamingAsync();
+        _lifecycle.Dispose();
+    }
 }

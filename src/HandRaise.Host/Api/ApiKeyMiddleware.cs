@@ -15,8 +15,13 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, ApiOptions options)
             return;
         }
 
-        var isWrite = !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method) &&
-            !HttpMethods.IsOptions(context.Request.Method);
+        if (HttpMethods.IsOptions(context.Request.Method))
+        {
+            await next(context);
+            return;
+        }
+
+        var isWrite = !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method);
         var hasConfiguredKey = !string.IsNullOrWhiteSpace(options.ApiKey);
         var suppliedKey = context.Request.Headers[options.ApiKeyHeader].FirstOrDefault()
             ?? context.Request.Query["api_key"].FirstOrDefault()

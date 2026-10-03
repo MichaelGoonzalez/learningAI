@@ -10,21 +10,13 @@ El código de producción es C#/.NET 10; `app/`, `tests/`, `config.yaml` y scrip
 
 ## Estado y roadmap
 
-Pruebas actuales: **103** (25 Domain, 39 Application, 30 Infrastructure.Windows, 9 Host), todas superadas en Release.
+Pruebas actuales: **255** (51 Domain, 111 Application, 33 Infrastructure.Windows, 60 Host), todas superadas en Release.
 
 | Bloque | Estado |
 |---|---|
-| C1 | Dominio puro: evaluación de manos, estados y zonas. |
-| C2 | Inventario DXGI/NVIDIA, recomendación y preferencia persistente de dispositivo. |
-| C3 | Inferencia YOLO26 Pose ONNX con Windows ML, CPU/DirectML y equivalencia numérica. |
-| C4 | Captura archivo/webcam/RTSP, pipeline, overlay, grabación y benchmark. |
-| C5 | ByteTrack propio, estados por track y bus de eventos determinista. |
-| C6 | EF Core/SQLite, migraciones, snapshots, retención y fechas UTC ancladas. |
-| C7 | Sin bloque independiente; numeración histórica saltó de C6 a C8. |
-| C8 | WPF/MVVM, mosaico, historial, dispositivo en caliente y editor de zonas. |
-| C9 | Publicación portable win-x64, manifiesto/hash, logs y avisos de terceros. |
-| D1 | Host consola/Windows Service y API `/api/v1` de lectura, identidad y capacidad. |
-| D2 | CRUD/operación de cámaras, DPAPI, prueba, snapshot, zonas y dispositivo por API. |
+| C1–C9, D1–D2 | Base funcional de video, inferencia ONNX, tracking, persistencia SQLite, host headless y WPF. |
+| E0–E1.5 | Evolución camera-centric, fundación genérica multi-analítica y freeze de contrato v1. |
+| E2–E5 | Catálogo real (5 analíticas: `hand_raise`, `person_presence`, `zone_intrusion`, `line_crossing`, `person_counting`), líneas virtuales y coexistencia por cámara. |
 | D2b pendiente | WebSocket de eventos/métricas y MJPEG; aceptar con reconexión y clientes simultáneos sin bloquear inferencia. |
 | D3 pendiente | Manifest/modelos v2 e importación/activar/revertir; aceptar cambio seguro y validación de hash/licencia. |
 | D4 pendiente | Módulos PackageCounting/ConveyorFlow; aceptar conteos deterministas con secuencias sintéticas. |
@@ -38,11 +30,11 @@ Pruebas actuales: **103** (25 Domain, 39 Application, 30 Infrastructure.Windows,
 
 | Proyecto/ruta | Responsabilidad |
 |---|---|
-| `src/HandRaise.Domain` | Reglas puras de manos, máquina de estados y geometría de zonas. |
-| `src/HandRaise.Application` | Contratos, inferencia abstracta, tracking, pipelines, eventos y repositorios. |
-| `src/HandRaise.Infrastructure.Windows` | OpenCV, Windows ML/ONNX, DXGI, SQLite, settings, snapshots y logs. |
+| `src/HandRaise.Domain` | Reglas puras de manos, máquina de estados, geometría de zonas y entidades analíticas. |
+| `src/HandRaise.Application` | Contratos, catálogo/instancias analíticas, inferencia abstracta, tracking, pipelines y eventos. |
+| `src/HandRaise.Infrastructure.Windows` | OpenCV, Windows ML/ONNX, DXGI, SQLite, settings, almacén JSON de analíticas y logs. |
 | `src/HandRaise.Desktop` | Aplicación WPF/MVVM y editor de zonas en proceso. |
-| `src/HandRaise.Host` | Generic Host/Kestrel, composición headless y API REST. |
+| `src/HandRaise.Host` | Generic Host/Kestrel, composición headless, gestión de analíticas y API REST. |
 | `src/HandRaise.DebugApp` | Consola de diagnóstico, grabación y benchmark. |
 | `src/HandRaise.DeviceProbe` | Inventario de hardware/runtimes. |
 | `src/HandRaise.InferenceProbe` | Comparación de inferencia CPU/DirectML. |
@@ -58,9 +50,14 @@ Auth: lecturas requieren API key si está configurada; sin clave solo aceptan lo
 |---|---|---|---|
 | GET | `/health`, `/metrics` | lectura | Salud/identidad y métricas. |
 | GET | `/devices`, `/system/runtime`, `/system/capacity` | lectura | Hardware, runtimes y capacidad estimada. |
+| GET | `/analytics/catalog` | lectura | Catálogo de analíticas disponibles en el nodo. |
 | GET | `/cameras`, `/cameras/{id}` | lectura | Cámaras persistentes y estado. |
 | POST | `/cameras` | escritura | Crear cámara. |
 | PUT/DELETE | `/cameras/{id}` | escritura | Modificar/eliminar cámara. |
+| GET/POST | `/cameras/{id}/analytics` | lectura/escritura | Listar e instalar instancias analíticas en la cámara. |
+| GET/PUT/DELETE | `/cameras/{id}/analytics/{instanceId}` | lectura/escritura | Consultar, actualizar configuración o eliminar analítica. |
+| GET/POST/PUT | `/cameras/{id}/lines` | lectura/escritura | Listar, crear o actualizar líneas virtuales por cámara. |
+| DELETE | `/cameras/{id}/lines/{lineId}` | escritura | Eliminar línea virtual. |
 | POST | `/cameras/{id}/start`, `/cameras/{id}/stop` | escritura | Habilitar e iniciar/detener. |
 | POST | `/cameras/test` | escritura | Probar fuente con timeout. |
 | GET | `/cameras/{id}/snapshot` | lectura | Último frame JPEG. |
@@ -77,8 +74,8 @@ Configuración principal: `src/HandRaise.Host/appsettings.json` (`nodeId`, `site
 | Datos | Escritorio | Host/servicio |
 |---|---|---|
 | DB/snapshots | `%LOCALAPPDATA%\HandRaiseDetection\events.db` y `snapshots\` | Igual, bajo el perfil de la cuenta que ejecuta el proceso. |
-| Zonas | `zones.json` | Dentro de `cameras.json`. |
-| Cámaras/credenciales | Configuración WPF; sin almacén D2 | `cameras.json` y `camera-credentials.json` (DPAPI máquina). |
+| Zonas / Líneas | `zones.json` | `cameras.json` (zonas), `lines.json` (líneas virtuales). |
+| Cámaras/credenciales | `node-credentials.json` (DPAPI máquina) y config WPF | `cameras.json`, `camera-credentials.json` y `node-credentials.json` (DPAPI máquina). |
 | Logs | `%LOCALAPPDATA%\HandRaiseDetection\logs\` | Igual, bajo el perfil de la cuenta de servicio. |
 
 ## Comandos (`cmd.exe`)

@@ -10,4 +10,7 @@ public sealed record CameraPipelineMetrics(
     double InferenceMilliseconds,
     double PostprocessMilliseconds,
     double OverlayMilliseconds,
-    double TotalMilliseconds);
+    double TotalMilliseconds,
+    double AnalyticDurationMilliseconds = 0.0,
+    int EvaluatorErrors = 0,
+    int ActiveAnalyticCount = 0);

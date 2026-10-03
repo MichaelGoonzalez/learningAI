@@ -5,6 +5,31 @@
         Title="Hand Raise Detection"
         Width="1440" Height="900" MinWidth="1050" MinHeight="680"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style x:Key="SegmentedTabRadio" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="RightPanelTabs" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="4,8" Cursor="Hand">
+                            <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource SecondaryText}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+                                <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource PrimaryText}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource PrimaryText}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -13,6 +38,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- Top Header Bar -->
         <Border Grid.Row="0" Background="{DynamicResource Surface}" CornerRadius="10" Padding="16">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -40,13 +66,15 @@
             </Grid>
         </Border>
 
+        <!-- Main Content Area -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="390" />
+                <ColumnDefinition Width="410" />
             </Grid.ColumnDefinitions>
 
+            <!-- Left Column: Camera Mosaic -->
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding Cameras}">
                     <ItemsControl.ItemsPanel>
@@ -125,63 +153,243 @@
                 </ItemsControl>
             </ScrollViewer>
 
+            <!-- Right Column: Multi-tab Panel -->
             <Border Grid.Column="2" Background="{DynamicResource Surface}" CornerRadius="10" Padding="14">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="12" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="12" />
+                        <RowDefinition Height="14" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Eventos" FontSize="20" FontWeight="SemiBold" />
-                    <StackPanel Grid.Row="2">
-                        <ComboBox ItemsSource="{Binding CameraFilters}"
-                                  SelectedItem="{Binding SelectedCameraFilter}" />
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <DatePicker SelectedDate="{Binding HistoryFrom}" />
-                            <DatePicker Grid.Column="2" SelectedDate="{Binding HistoryTo}" />
-                        </Grid>
-                        <Button Content="Cargar historial" Command="{Binding RefreshHistoryCommand}"
-                                HorizontalAlignment="Stretch" Margin="0,8,0,0" />
-                    </StackPanel>
-                    <ListBox Grid.Row="4" ItemsSource="{Binding Events}"
-                             Background="Transparent" BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
-                                        Padding="0,10" Width="340">
-                                    <Grid>
+
+                    <!-- Segmented Tabs Selector -->
+                    <Border Grid.Row="0" Background="{DynamicResource SurfaceAlt}" CornerRadius="8" Padding="3">
+                        <UniformGrid Columns="3">
+                            <RadioButton Content="Conexión Web" Style="{StaticResource SegmentedTabRadio}"
+                                         IsChecked="{Binding IsWebConnectionTabSelected}" />
+                            <RadioButton Content="Eventos" Style="{StaticResource SegmentedTabRadio}"
+                                         IsChecked="{Binding IsEventsTabSelected}" />
+                            <RadioButton Content="Diagnóstico" Style="{StaticResource SegmentedTabRadio}"
+                                         IsChecked="{Binding IsDiagnosticsTabSelected}" />
+                        </UniformGrid>
+                    </Border>
+
+                    <!-- TAB 0: CONEXIÓN CON MÓDULO WEB -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding IsWebConnectionTabSelected, Converter={StaticResource BooleanToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="CONEXIÓN CON MÓDULO WEB" FontSize="15" FontWeight="Bold" Margin="0,0,0,4" />
+                            <TextBlock Text="Datos necesarios para vincular React o el panel web con este nodo de visión."
+                                       Foreground="{DynamicResource SecondaryText}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12" />
+
+                            <!-- Status Box -->
+                            <Border Background="{DynamicResource SurfaceAlt}" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="6" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="6" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Estado API:" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Width="9" Height="9" Fill="{Binding NodeStatusBadgeBrush}" Margin="0,0,6,0" />
+                                        <TextBlock Text="{Binding ApiStatusText}" FontWeight="SemiBold" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Nodo:" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding NodeIdText}" FontWeight="SemiBold" />
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Sitio:" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SiteIdText}" />
+                                </Grid>
+                            </Border>
+
+                            <!-- Access Mode -->
+                            <TextBlock Text="MODO DE ACCESO" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,6" />
+                            <Border Background="{DynamicResource SurfaceAlt}" CornerRadius="8" Padding="10" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <RadioButton Content="Solo este PC (Localhost · 127.0.0.1)"
+                                                 IsChecked="{Binding IsLocalOnlyAccess}"
+                                                 FontWeight="SemiBold" Margin="0,0,0,6" />
+                                    <RadioButton Content="Red local (LAN · otros equipos de la red)"
+                                                 IsChecked="{Binding IsLanAccess}"
+                                                 FontWeight="SemiBold" Margin="0,0,0,4" />
+
+                                    <Border Background="#2A2415" BorderBrush="#5A4820" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,6,0,0"
+                                            Visibility="{Binding IsLanAccess, Converter={StaticResource BooleanToVisibility}}">
+                                        <TextBlock Text="Nota: Si conecta desde otro equipo en la red, asegúrese de permitir el puerto 5080 en el Firewall de Windows."
+                                                   FontSize="11" Foreground="#F7D070" TextWrapping="Wrap" />
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Connection Addresses -->
+                            <TextBlock Text="DIRECCIONES DE CONEXIÓN" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,6" />
+                            <Border Background="{DynamicResource SurfaceAlt}" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <TextBlock Text="Dirección local:" Foreground="{DynamicResource SecondaryText}" FontSize="11" />
+                                    <Grid Margin="0,3,0,10">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="76" />
-                                            <ColumnDefinition Width="12" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Text="{Binding LocalAddressText, Mode=OneWay}" IsReadOnly="True" Padding="6" Background="{DynamicResource Surface}" />
+                                        <Button Grid.Column="1" Content="Copiar" Command="{Binding CopyAddressCommand}" Margin="6,0,0,0" />
+                                    </Grid>
+
+                                    <TextBlock Text="Dirección LAN (Red local):" Foreground="{DynamicResource SecondaryText}" FontSize="11" />
+                                    <Grid Margin="0,3,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Text="{Binding LanAddressText, Mode=OneWay}" IsReadOnly="True" Padding="6" Background="{DynamicResource Surface}" />
+                                        <Button Grid.Column="1" Content="Copiar" Command="{Binding CopyLanAddressCommand}" IsEnabled="{Binding HasLanAddress}" Margin="6,0,0,0" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- API Key -->
+                            <TextBlock Text="CLAVE DE ACCESO (API KEY)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,6" />
+                            <Border Background="{DynamicResource SurfaceAlt}" CornerRadius="8" Padding="12" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBox Text="{Binding ApiKeyMasked, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="13" Padding="6" Background="{DynamicResource Surface}" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="8" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <Border Background="{DynamicResource SurfaceAlt}" CornerRadius="5"
-                                                Width="76" Height="58">
-                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
-                                        </Border>
-                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding Detail}" FontSize="11"
-                                                       Foreground="{DynamicResource SecondaryText}"
-                                                       TextWrapping="Wrap" Margin="0,3,0,0" />
-                                        </StackPanel>
+                                        <Button Content="{Binding ApiKeyVisibilityButtonText}" Command="{Binding ToggleApiKeyVisibilityCommand}" Background="{DynamicResource Surface}" />
+                                        <Button Grid.Column="2" Content="Copiar clave" Command="{Binding CopyApiKeyCommand}" FontWeight="SemiBold" />
                                     </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Primary Action Buttons -->
+                            <Button Content="Copiar configuración (JSON)"
+                                    Command="{Binding CopyConfigurationCommand}"
+                                    Padding="10" FontWeight="Bold" FontSize="13" Margin="0,0,0,8" />
+
+                            <Button Content="Regenerar clave de acceso"
+                                    Command="{Binding RegenerateApiKeyCommand}"
+                                    Background="Transparent" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}"
+                                    Foreground="{DynamicResource SecondaryText}" FontSize="11" Padding="6" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- TAB 1: EVENTOS -->
+                    <Grid Grid.Row="2" Visibility="{Binding IsEventsTabSelected, Converter={StaticResource BooleanToVisibility}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="12" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Historial de Eventos" FontSize="18" FontWeight="SemiBold" />
+                        <StackPanel Grid.Row="1">
+                            <ComboBox ItemsSource="{Binding CameraFilters}"
+                                      SelectedItem="{Binding SelectedCameraFilter}" />
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <DatePicker SelectedDate="{Binding HistoryFrom}" />
+                                <DatePicker Grid.Column="2" SelectedDate="{Binding HistoryTo}" />
+                            </Grid>
+                            <Button Content="Cargar historial" Command="{Binding RefreshHistoryCommand}"
+                                    HorizontalAlignment="Stretch" Margin="0,8,0,0" />
+                        </StackPanel>
+                        <ListBox Grid.Row="2" ItemsSource="{Binding Events}" Margin="0,8,0,0"
+                                 Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                                            Padding="0,10" Width="360">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="76" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Background="{DynamicResource SurfaceAlt}" CornerRadius="5"
+                                                    Width="76" Height="58">
+                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                            </Border>
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Detail}" FontSize="11"
+                                                           Foreground="{DynamicResource SecondaryText}"
+                                                           TextWrapping="Wrap" Margin="0,3,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
+                    <!-- TAB 2: DIAGNÓSTICO -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding IsDiagnosticsTabSelected, Converter={StaticResource BooleanToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="DIAGNÓSTICO DEL SISTEMA" FontSize="15" FontWeight="Bold" Margin="0,0,0,4" />
+                            <TextBlock Text="Estado técnico del hardware y motor de visión."
+                                       Foreground="{DynamicResource SecondaryText}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12" />
+
+                            <Border Background="{DynamicResource SurfaceAlt}" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="6" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="6" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="6" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="6" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Preparación:" Foreground="{DynamicResource SecondaryText}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ReadinessText}" FontWeight="SemiBold" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Procesador:" Foreground="{DynamicResource SecondaryText}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ProcessorText}" TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Cámaras:" Foreground="{DynamicResource SecondaryText}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ActiveCamerasCountText}" />
+
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Tiempo activo:" Foreground="{DynamicResource SecondaryText}" />
+                                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding UptimeText}" />
+
+                                    <TextBlock Grid.Row="8" Grid.Column="0" Text="Versión:" Foreground="{DynamicResource SecondaryText}" />
+                                    <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding AboutText}" />
+                                </Grid>
+                            </Border>
+
+                            <Button Content="Actualizar diagnóstico" Command="{Binding RefreshDiagnosticsCommand}"
+                                    HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Border>
         </Grid>
 
+        <!-- Bottom Status Bar -->
         <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Margin="4,12,0,0"
                    Foreground="{DynamicResource SecondaryText}" />
     </Grid>

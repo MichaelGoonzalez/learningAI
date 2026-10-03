@@ -22,6 +22,12 @@ public static class NodeBootstrapper
         var credDir = Path.GetDirectoryName(options.Storage.CameraCredentialStorePath);
         if (!string.IsNullOrEmpty(credDir)) Directory.CreateDirectory(credDir);
 
+        var nodeCredDir = Path.GetDirectoryName(options.Storage.NodeCredentialStorePath);
+        if (!string.IsNullOrEmpty(nodeCredDir)) Directory.CreateDirectory(nodeCredDir);
+
+        var analyticDir = Path.GetDirectoryName(options.Storage.AnalyticStorePath);
+        if (!string.IsNullOrEmpty(analyticDir)) Directory.CreateDirectory(analyticDir);
+
         // 2. Persistent Node Identity if needed
         var dataDir = dbDir ?? AppDomain.CurrentDomain.BaseDirectory;
         var identityPath = Path.Combine(dataDir, "node-identity.json");

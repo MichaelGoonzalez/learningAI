@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using HandRaise.Application.Analytics;
 using HandRaise.Application.Capture;
 using HandRaise.Application.Events;
 using HandRaise.Application.Hardware;
@@ -9,6 +10,7 @@ using HandRaise.Application.Pipelines;
 using HandRaise.Application.Storage;
 using HandRaise.Application.Tracking;
 using HandRaise.Application.Zones;
+using HandRaise.Domain.Analytics;
 using HandRaise.Domain.Detection;
 using HandRaise.Domain.Zones;
 using HandRaise.Host.Configuration;
@@ -32,7 +34,10 @@ public sealed class HeadlessEngineService(
     HandEventBus eventBus,
     ICameraStore cameraStore,
     ICameraCredentialStore credentialStore,
-    ILogger<HeadlessEngineService> logger) : BackgroundService, ICameraManagementService
+    IAnalyticInstanceStore analyticStore,
+    IAnalyticEvaluatorFactory evaluatorFactory,
+    ILogger<HeadlessEngineService> logger,
+    HandRaise.Application.Lines.ILineStore? lineStore = null) : BackgroundService, ICameraManagementService
 {
     private readonly ConcurrentDictionary<string, CameraSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
@@ -63,7 +68,32 @@ public sealed class HeadlessEngineService(
             runtimeState.Set(_inventory, _backend.Device.Id, options.Model.Name);
             await cameraStore.InitializeAsync(SeedCameras(), stoppingToken);
             foreach (var camera in await cameraStore.ListAsync(stoppingToken))
+            {
+                var existingAnalytics = await analyticStore.GetByCameraIdAsync(camera.Id, stoppingToken);
+                if (existingAnalytics.Count == 0)
+                {
+                    var legacyInstance = new CameraAnalyticInstance(
+                        Id: $"an-{camera.Id}-handraise",
+                        CameraId: camera.Id,
+                        AnalyticTypeId: "hand_raise",
+                        Name: "Detección de Manos Levantadas",
+                        Enabled: true,
+                        Status: AnalyticStatus.Active,
+                        Configuration: new Dictionary<string, object?>
+                        {
+                            ["strict_mode"] = options.Hands.StrictMode,
+                            ["consecutive_frames"] = options.Hands.ConsecutiveFrames,
+                            ["cooldown_ms"] = options.Hands.CooldownMs
+                        },
+                        AssignedZoneIds: camera.Zones.Select(z => z.Name).ToArray(),
+                        AssignedLineIds: [],
+                        CreatedAt: DateTimeOffset.UtcNow,
+                        UpdatedAt: DateTimeOffset.UtcNow);
+                    await analyticStore.SaveAsync(legacyInstance, stoppingToken);
+                }
+
                 if (camera.Enabled) await StartCoreAsync(camera, stoppingToken);
+            }
             _ready.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
         }
@@ -230,6 +260,18 @@ public sealed class HeadlessEngineService(
         return new(CameraStreamStatus.Success, subscriber.Channel.Reader, subscriber);
     }
 
+    public async Task RefreshCameraEvaluatorsAsync(string cameraId, CancellationToken token = default)
+    {
+        if (_sessions.TryGetValue(cameraId, out var session))
+        {
+            var instances = await analyticStore.GetByCameraIdAsync(cameraId, token);
+            var evaluators = instances.Count > 0
+                ? instances.Select(inst => evaluatorFactory.CreateEvaluator(inst, Detection())).ToArray()
+                : [evaluatorFactory.CreateEvaluator(new CameraAnalyticInstance($"an-{cameraId}-default", cameraId, "hand_raise", "Default HandRaise"), Detection())];
+            session.Evaluators.Replace(evaluators);
+        }
+    }
+
     private async Task StartCoreAsync(CameraDefinition camera, CancellationToken token)
     {
         await _lifecycle.WaitAsync(token);
@@ -238,8 +280,13 @@ public sealed class HeadlessEngineService(
             if (_sessions.ContainsKey(camera.Id)) return;
             var zones = new AtomicZoneProvider([], true);
             zones.Replace(camera.Zones);
+            var instances = await analyticStore.GetByCameraIdAsync(camera.Id, token);
+            var evaluators = instances.Count > 0
+                ? instances.Select(inst => evaluatorFactory.CreateEvaluator(inst, Detection())).ToArray()
+                : [evaluatorFactory.CreateEvaluator(new CameraAnalyticInstance($"an-{camera.Id}-default", camera.Id, "hand_raise", "Default HandRaise"), Detection())];
+            var evaluatorProvider = new AtomicEvaluatorProvider(evaluators);
             var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_hostToken);
-            var session = new CameraSession(cancellation, zones);
+            var session = new CameraSession(cancellation, zones, evaluatorProvider);
             metrics.Register(camera.Id, camera.Name);
             if (!_sessions.TryAdd(camera.Id, session)) { cancellation.Dispose(); return; }
             session.Task = RunCameraAsync(camera, session, cancellation.Token);
@@ -271,7 +318,9 @@ public sealed class HeadlessEngineService(
                 backendGeneration: () => backend.Generation, snapshotEncoder: new OpenCvPersonSnapshotEncoder(),
                 snapshotOptions: new(options.Storage.SnapshotMarginRatio, options.Storage.JpegQuality),
                 log: message => logger.LogWarning("Cámara {Camera}: {Message}", camera.Id, RollingErrorLog.Sanitize(message)),
-                zoneProvider: session.Zones);
+                zoneProvider: session.Zones,
+                evaluatorProvider: session.Evaluators,
+                lineProvider: lineStore as HandRaise.Application.Lines.ILineProvider);
             await foreach (var frame in pipeline.RunAsync(token))
             {
                 using (frame)
@@ -360,7 +409,10 @@ public sealed class HeadlessEngineService(
         }
     }
 
-    private sealed class CameraSession(CancellationTokenSource cancellation, AtomicZoneProvider zones) : IDisposable
+    private sealed class CameraSession(
+        CancellationTokenSource cancellation,
+        AtomicZoneProvider zones,
+        AtomicEvaluatorProvider evaluators) : IDisposable
     {
         private readonly object _subscribersLock = new();
         private readonly List<StreamSubscriber> _subscribers = [];
@@ -368,6 +420,7 @@ public sealed class HeadlessEngineService(
 
         public CancellationTokenSource Cancellation { get; } = cancellation;
         public AtomicZoneProvider Zones { get; } = zones;
+        public AtomicEvaluatorProvider Evaluators { get; } = evaluators;
         public Task? Task { get; set; }
 
         public void SetSnapshot(byte[] value) => Volatile.Write(ref _snapshot, value);

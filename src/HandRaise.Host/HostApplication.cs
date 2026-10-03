@@ -2,9 +2,11 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using HandRaise.Application.Analytics;
 using HandRaise.Application.Events;
 using HandRaise.Application.Pipelines;
 using HandRaise.Application.Storage;
+using HandRaise.Domain.Analytics;
 using HandRaise.Host.Api;
 using HandRaise.Host.Configuration;
 using HandRaise.Host.Services;
@@ -38,11 +40,24 @@ public static class HostApplication
         builder.Services.AddSingleton<HandEventBus>();
         builder.Services.AddSingleton<PreflightChecker>();
         builder.Services.AddSingleton<DiagnosticsProvider>();
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IAnalyticCatalog)))
+            builder.Services.AddSingleton<IAnalyticCatalog, StandardAnalyticCatalog>();
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IAnalyticEvaluatorFactory)))
+            builder.Services.AddSingleton<IAnalyticEvaluatorFactory, AnalyticEvaluatorFactory>();
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IAnalyticInstanceStore)))
+            builder.Services.AddSingleton<IAnalyticInstanceStore>(_ => new JsonAnalyticInstanceStore(options.Storage.AnalyticStorePath));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IAnalyticManagementService)))
+            builder.Services.AddSingleton<IAnalyticManagementService, AnalyticManagementService>();
+        if (!builder.Services.Any(item => item.ServiceType == typeof(HandRaise.Application.Lines.ILineStore)))
+            builder.Services.AddSingleton<HandRaise.Application.Lines.ILineStore>(_ => new JsonLineStore(options.Storage.LinesStorePath));
         if (!builder.Services.Any(item => item.ServiceType == typeof(ICameraStore)))
             builder.Services.AddSingleton<ICameraStore>(_ => new JsonCameraStore(options.Storage.CameraStorePath));
         if (!builder.Services.Any(item => item.ServiceType == typeof(ICameraCredentialStore)))
             builder.Services.AddSingleton<ICameraCredentialStore>(_ => new JsonCameraCredentialStore(
                 options.Storage.CameraCredentialStorePath, new MachineDpapiProtector()));
+        if (!builder.Services.Any(item => item.ServiceType == typeof(INodeCredentialStore)))
+            builder.Services.AddSingleton<INodeCredentialStore>(_ => new JsonNodeCredentialStore(
+                options.Storage.NodeCredentialStorePath, new MachineDpapiProtector()));
         if (!builder.Services.Any(item => item.ServiceType == typeof(IHandEventRepository)))
         {
             builder.Services.AddSingleton<IHandEventRepository>(_ =>
@@ -67,8 +82,9 @@ public static class HostApplication
         builder.Services.AddSwaggerGen();
         builder.Services.AddCors(cors => cors.AddPolicy("Configured", policy =>
         {
-            if (options.Api.AllowedOrigins.Length > 0)
-                policy.WithOrigins(options.Api.AllowedOrigins).AllowAnyHeader().AllowAnyMethod();
+            policy.SetIsOriginAllowed(origin => CorsOriginValidator.IsAllowedOrigin(origin, options.Api.AllowedOrigins))
+                .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .WithHeaders("Content-Type", "Accept", "X-Api-Key", options.Api.ApiKeyHeader);
         }));
 
         var app = builder.Build();
@@ -115,6 +131,10 @@ public static class HostApplication
             items = runtime.Inventory.Devices,
             warnings = runtime.Inventory.Warnings
         }));
+
+        api.MapGet("/analytics/catalog", (IAnalyticManagementService service) =>
+            Results.Ok(service.GetCatalog()));
+
         api.MapGet("/cameras", async (ICameraManagementService service, CancellationToken token) =>
             Results.Ok(await service.ListAsync(token)));
         api.MapGet("/cameras/{id}", async (string id, ICameraManagementService service, CancellationToken token) =>
@@ -131,6 +151,134 @@ public static class HostApplication
             await service.StopAsync(id, token) is { } camera ? Results.Ok(camera) : Results.NotFound());
         api.MapPost("/cameras/test", async (CameraTestRequest request, ICameraManagementService service, CancellationToken token) =>
             Results.Ok(await service.TestAsync(request, token)));
+
+        api.MapGet("/cameras/{cameraId}/analytics", async (
+            string cameraId, IAnalyticManagementService service, CancellationToken token) =>
+            await service.ListByCameraAsync(cameraId, token) is { } items
+                ? Results.Ok(items)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada", detail: $"La cámara '{cameraId}' no existe."));
+
+        api.MapPost("/cameras/{cameraId}/analytics", async (
+            string cameraId, CameraAnalyticWriteRequest request, IAnalyticManagementService service, CancellationToken token) =>
+        {
+            try
+            {
+                var created = await service.CreateAsync(cameraId, request, token);
+                return Results.Created($"/api/v1/cameras/{cameraId}/analytics/{created.Id}", created);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada", detail: ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Conflicto al crear analítica", detail: ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Parámetros inválidos", detail: ex.Message);
+            }
+        });
+
+        api.MapGet("/cameras/{cameraId}/analytics/{instanceId}", async (
+            string cameraId, string instanceId, IAnalyticManagementService service, CancellationToken token) =>
+            await service.GetAsync(cameraId, instanceId, token) is { } instance
+                ? Results.Ok(instance)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Instancia analítica no encontrada"));
+
+        api.MapPut("/cameras/{cameraId}/analytics/{instanceId}", async (
+            string cameraId, string instanceId, CameraAnalyticWriteRequest request, IAnalyticManagementService service, CancellationToken token) =>
+        {
+            try
+            {
+                var updated = await service.UpdateAsync(cameraId, instanceId, request, token);
+                return updated is not null
+                    ? Results.Ok(updated)
+                    : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Instancia analítica no encontrada");
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Parámetros inválidos", detail: ex.Message);
+            }
+        });
+
+        api.MapDelete("/cameras/{cameraId}/analytics/{instanceId}", async (
+            string cameraId, string instanceId, IAnalyticManagementService service, CancellationToken token) =>
+            await service.DeleteAsync(cameraId, instanceId, token)
+                ? Results.NoContent()
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Instancia analítica no encontrada"));
+
+        api.MapGet("/cameras/{cameraId}/lines", async (
+            string cameraId, ICameraStore cameraStore, HandRaise.Application.Lines.ILineStore lineStore, CancellationToken token) =>
+        {
+            if (await cameraStore.GetAsync(cameraId, token) is null)
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada", detail: $"La cámara '{cameraId}' no existe.");
+            return Results.Ok(await lineStore.ListByCameraAsync(cameraId, token));
+        });
+
+        api.MapPost("/cameras/{cameraId}/lines", async (
+            string cameraId, HandRaise.Domain.Lines.LineDefinition line, ICameraStore cameraStore, HandRaise.Application.Lines.ILineStore lineStore, CancellationToken token) =>
+        {
+            if (await cameraStore.GetAsync(cameraId, token) is null)
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada", detail: $"La cámara '{cameraId}' no existe.");
+            try
+            {
+                var adjusted = line with { CameraId = cameraId };
+                adjusted.Validate();
+                var saved = await lineStore.SaveAsync(cameraId, adjusted, token);
+                return Results.Created($"/api/v1/cameras/{cameraId}/lines/{saved.Id}", saved);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Línea inválida", detail: ex.Message);
+            }
+        });
+
+        api.MapPut("/cameras/{cameraId}/lines/{lineId}", async (
+            string cameraId, string lineId, HandRaise.Domain.Lines.LineDefinition line, ICameraStore cameraStore, HandRaise.Application.Lines.ILineStore lineStore, CancellationToken token) =>
+        {
+            if (await cameraStore.GetAsync(cameraId, token) is null)
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada", detail: $"La cámara '{cameraId}' no existe.");
+            try
+            {
+                var adjusted = line with { Id = lineId, CameraId = cameraId };
+                adjusted.Validate();
+                var saved = await lineStore.SaveAsync(cameraId, adjusted, token);
+                return Results.Ok(saved);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Línea inválida", detail: ex.Message);
+            }
+        });
+
+        api.MapPut("/cameras/{cameraId}/lines", async (
+            string cameraId, IReadOnlyList<HandRaise.Domain.Lines.LineDefinition> lines, ICameraStore cameraStore, HandRaise.Application.Lines.ILineStore lineStore, CancellationToken token) =>
+        {
+            if (await cameraStore.GetAsync(cameraId, token) is null)
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada", detail: $"La cámara '{cameraId}' no existe.");
+            try
+            {
+                var adjustedList = lines.Select(l => l with { CameraId = cameraId }).ToArray();
+                foreach (var line in adjustedList) line.Validate();
+                await lineStore.SaveAllAsync(cameraId, adjustedList, token);
+                return Results.Ok(adjustedList);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Líneas inválidas", detail: ex.Message);
+            }
+        });
+
+        api.MapDelete("/cameras/{cameraId}/lines/{lineId}", async (
+            string cameraId, string lineId, ICameraStore cameraStore, HandRaise.Application.Lines.ILineStore lineStore, CancellationToken token) =>
+        {
+            if (await cameraStore.GetAsync(cameraId, token) is null)
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada", detail: $"La cámara '{cameraId}' no existe.");
+            return await lineStore.DeleteAsync(cameraId, lineId, token)
+                ? Results.NoContent()
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Línea no encontrada");
+        });
         api.MapGet("/cameras/{id}/snapshot", async (string id, ICameraManagementService service, CancellationToken token) =>
             await service.GetSnapshotAsync(id, token) is { } jpeg
                 ? Results.File(jpeg, "image/jpeg")
