@@ -1,6 +1,7 @@
 using System.Text.Json;
 using HandRaise.Application.Hardware;
 using HandRaise.Application.Inference;
+using HandRaise.Domain.Models;
 using HandRaise.Infrastructure.Windows.Hardware;
 using HandRaise.Infrastructure.Windows.Inference;
 

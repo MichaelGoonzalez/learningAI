@@ -11,6 +11,9 @@ public sealed class ZoneEditorOverlay : FrameworkElement
     public static readonly DependencyProperty ZonesProperty = DependencyProperty.Register(
         nameof(Zones), typeof(IReadOnlyList<NormalizedZone>), typeof(ZoneEditorOverlay),
         new FrameworkPropertyMetadata(Array.Empty<NormalizedZone>(), FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty LinesProperty = DependencyProperty.Register(
+        nameof(Lines), typeof(IReadOnlyList<HandRaise.Domain.Lines.LineDefinition>), typeof(ZoneEditorOverlay),
+        new FrameworkPropertyMetadata(Array.Empty<HandRaise.Domain.Lines.LineDefinition>(), FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty DraftPointsProperty = DependencyProperty.Register(
         nameof(DraftPoints), typeof(IReadOnlyList<NormalizedPoint>), typeof(ZoneEditorOverlay),
         new FrameworkPropertyMetadata(Array.Empty<NormalizedPoint>(), FrameworkPropertyMetadataOptions.AffectsRender));
@@ -28,6 +31,7 @@ public sealed class ZoneEditorOverlay : FrameworkElement
     private string? _dragZone;
 
     public IReadOnlyList<NormalizedZone> Zones { get => (IReadOnlyList<NormalizedZone>)GetValue(ZonesProperty); set => SetValue(ZonesProperty, value); }
+    public IReadOnlyList<HandRaise.Domain.Lines.LineDefinition> Lines { get => (IReadOnlyList<HandRaise.Domain.Lines.LineDefinition>)GetValue(LinesProperty); set => SetValue(LinesProperty, value); }
     public IReadOnlyList<NormalizedPoint> DraftPoints { get => (IReadOnlyList<NormalizedPoint>)GetValue(DraftPointsProperty); set => SetValue(DraftPointsProperty, value); }
     public bool Editing { get => (bool)GetValue(EditingProperty); set => SetValue(EditingProperty, value); }
     public int FrameWidth { get => (int)GetValue(FrameWidthProperty); set => SetValue(FrameWidthProperty, value); }
@@ -36,17 +40,35 @@ public sealed class ZoneEditorOverlay : FrameworkElement
     protected override void OnRender(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
-        if (!Editing || FrameWidth <= 0 || FrameHeight <= 0) return;
+        if (FrameWidth <= 0 || FrameHeight <= 0) return;
         drawingContext.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
         var rect = VideoRect();
-        var line = new Pen(Brushes.DeepSkyBlue, 2);
+        var linePen = new Pen(Brushes.DeepSkyBlue, 2);
         foreach (var zone in Zones)
         {
-            DrawPolygon(drawingContext, zone.Points, rect, line, true);
-            foreach (var point in zone.Points) DrawHandle(drawingContext, ToView(point, rect), Brushes.White);
+            DrawPolygon(drawingContext, zone.Points, rect, linePen, true);
+            if (Editing)
+            {
+                foreach (var point in zone.Points) DrawHandle(drawingContext, ToView(point, rect), Brushes.White);
+            }
         }
-        DrawPolygon(drawingContext, DraftPoints, rect, new Pen(Brushes.Gold, 2), false);
-        foreach (var point in DraftPoints) DrawHandle(drawingContext, ToView(point, rect), Brushes.Gold);
+        if (Lines is { Count: > 0 })
+        {
+            var tripPen = new Pen(Brushes.OrangeRed, 2);
+            foreach (var line in Lines)
+            {
+                var ptA = ToView(new NormalizedPoint(line.PointA.X, line.PointA.Y), rect);
+                var ptB = ToView(new NormalizedPoint(line.PointB.X, line.PointB.Y), rect);
+                drawingContext.DrawLine(tripPen, ptA, ptB);
+                DrawHandle(drawingContext, ptA, Brushes.Cyan);
+                DrawHandle(drawingContext, ptB, Brushes.Magenta);
+            }
+        }
+        if (Editing)
+        {
+            DrawPolygon(drawingContext, DraftPoints, rect, new Pen(Brushes.Gold, 2), false);
+            foreach (var point in DraftPoints) DrawHandle(drawingContext, ToView(point, rect), Brushes.Gold);
+        }
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)

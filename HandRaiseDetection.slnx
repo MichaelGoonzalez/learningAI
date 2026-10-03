@@ -14,5 +14,6 @@
     <Project Path="tests-csharp/HandRaise.Domain.Tests/HandRaise.Domain.Tests.csproj" />
     <Project Path="tests-csharp/HandRaise.Infrastructure.Windows.Tests/HandRaise.Infrastructure.Windows.Tests.csproj" />
     <Project Path="tests-csharp/HandRaise.Host.Tests/HandRaise.Host.Tests.csproj" />
+    <Project Path="tests-csharp/HandRaise.Desktop.Tests/HandRaise.Desktop.Tests.csproj" />
   </Folder>
 </Solution>

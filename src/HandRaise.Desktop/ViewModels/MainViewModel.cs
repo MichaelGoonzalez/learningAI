@@ -16,6 +16,7 @@ using HandRaise.Application.Storage;
 using HandRaise.Application.Zones;
 using HandRaise.Desktop.Configuration;
 using HandRaise.Desktop.Services;
+using HandRaise.Domain.Rules;
 using HandRaise.Host.Services;
 using HandRaise.Infrastructure.Windows.Hardware;
 
@@ -39,6 +40,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private bool _isNodeBusy;
     private bool _disposed;
 
+    // Navigation (0=Resumen, 1=Cámaras, 2=Alertas, 3=Integraciones, 4=Modelos, 5=Sistema, 6=Conexión Web, 7=Diagnóstico, 8=Detalle Cámara)
+    private int _selectedNavIndex = 0;
+    private CameraViewModel? _selectedDetailCamera;
+
     // Node Status
     private string _nodeStatusText = "Iniciando...";
     private Brush _nodeStatusBadgeBrush = new SolidColorBrush(Color.FromRgb(247, 184, 75)); // Yellow
@@ -52,6 +57,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private string _processorText = "Detectando hardware...";
     private string _activeCamerasCountText = "0 activas";
     private string _uptimeText = "00:00:00";
+    private double _aggregateFps = 0.0;
+    private string _capacityStateText = "Normal";
 
     // API & Remote Access Settings
     private bool _isLanAccess;
@@ -59,8 +66,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private string _apiKey = string.Empty;
     private bool _isApiKeyVisible;
 
-    // Navigation (Right panel tabs: 0 = Conexión Web, 1 = Eventos, 2 = Diagnóstico)
-    private int _selectedRightTab;
+    // Add Camera Modal
+    private bool _isAddCameraModalOpen;
+    private string _newCameraName = "Cámara Nueva";
+    private string _newCameraSource = "0";
+    private string _newCameraType = "USB";
+    private bool _newCameraAutoStart = true;
+    private string? _addCameraError;
+
+    // Alerts Filtering
+    private string _selectedAlertSeverityFilter = "Todas";
+    private string _selectedAlertStatusFilter = "Todas";
+
     private NodeDiagnosticsReport? _diagnosticsReport;
 
     public MainViewModel(
@@ -84,9 +101,20 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         Devices = [];
         Cameras = [];
         Events = [];
+        Alerts = [];
+        Destinations = [];
+        Policies = [];
+        Attempts = [];
+        Models = [];
         CameraFilters = ["Todas"];
         SelectedCameraFilter = "Todas";
 
+        // Navigation Commands
+        NavigateCommand = new RelayCommand<int>(index => SelectedNavIndex = index);
+        OpenCameraDetailCommand = new AsyncRelayCommand<CameraViewModel>(OpenDetailAsync);
+        BackToCamerasCommand = new RelayCommand(() => SelectedNavIndex = 1);
+
+        // Node Controls
         StartNodeCommand = new AsyncRelayCommand(StartNodeAsync, () => !_isNodeBusy && !_hostController.IsRunning);
         StopNodeCommand = new AsyncRelayCommand(StopNodeAsync, () => !_isNodeBusy && _hostController.IsRunning);
         RestartNodeCommand = new AsyncRelayCommand(RestartNodeAsync, () => !_isNodeBusy);
@@ -95,6 +123,17 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         RefreshHistoryCommand = new AsyncRelayCommand(RefreshHistoryAsync);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
 
+        // Camera Management
+        ShowAddCameraModalCommand = new RelayCommand(() => IsAddCameraModalOpen = true);
+        CloseAddCameraModalCommand = new RelayCommand(() => IsAddCameraModalOpen = false);
+        AddCameraCommand = new AsyncRelayCommand(AddCameraAsync);
+
+        // Alerts & Integrations Commands
+        RefreshAlertsCommand = new AsyncRelayCommand(RefreshAlertsAsync);
+        RefreshIntegrationsCommand = new AsyncRelayCommand(RefreshIntegrationsAsync);
+        RefreshModelsCommand = new AsyncRelayCommand(RefreshModelsAsync);
+
+        // Web Connection Commands
         ToggleApiKeyVisibilityCommand = new RelayCommand(ToggleApiKeyVisibility);
         CopyApiKeyCommand = new RelayCommand(CopyApiKeyToClipboard);
         CopyAddressCommand = new RelayCommand(CopyLocalAddressToClipboard);
@@ -111,11 +150,57 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _hostController.StatusChanged += OnHostStatusChanged;
     }
 
+    // Collections
     public ObservableCollection<CameraViewModel> Cameras { get; }
     public ObservableCollection<DeviceItemViewModel> Devices { get; }
     public ObservableCollection<EventItemViewModel> Events { get; }
+    public ObservableCollection<AlertItemViewModel> Alerts { get; }
+    public ObservableCollection<DestinationItemViewModel> Destinations { get; }
+    public ObservableCollection<PolicyItemViewModel> Policies { get; }
+    public ObservableCollection<AttemptItemViewModel> Attempts { get; }
+    public ObservableCollection<ModelItemViewModel> Models { get; }
     public ObservableCollection<string> CameraFilters { get; }
-    public string AboutText { get; } = $"Vision Edge Node · v{Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.0.0"}";
+
+    public string AppTitle => "VisionControl Edge";
+    public string AppSubtitle => "Nodo de Visión Artificial";
+    public string AboutText => $"VisionControl Edge · v{Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.0.0"}";
+
+    // Navigation Properties
+    public int SelectedNavIndex
+    {
+        get => _selectedNavIndex;
+        set
+        {
+            if (SetProperty(ref _selectedNavIndex, value))
+            {
+                OnPropertyChanged(nameof(IsOverviewSelected));
+                OnPropertyChanged(nameof(IsCamerasSelected));
+                OnPropertyChanged(nameof(IsAlertsSelected));
+                OnPropertyChanged(nameof(IsIntegrationsSelected));
+                OnPropertyChanged(nameof(IsModelsSelected));
+                OnPropertyChanged(nameof(IsSystemSelected));
+                OnPropertyChanged(nameof(IsWebConnectionSelected));
+                OnPropertyChanged(nameof(IsDiagnosticsSelected));
+                OnPropertyChanged(nameof(IsCameraDetailSelected));
+            }
+        }
+    }
+
+    public bool IsOverviewSelected => _selectedNavIndex == 0;
+    public bool IsCamerasSelected => _selectedNavIndex == 1;
+    public bool IsAlertsSelected => _selectedNavIndex == 2;
+    public bool IsIntegrationsSelected => _selectedNavIndex == 3;
+    public bool IsModelsSelected => _selectedNavIndex == 4;
+    public bool IsSystemSelected => _selectedNavIndex == 5;
+    public bool IsWebConnectionSelected => _selectedNavIndex == 6;
+    public bool IsDiagnosticsSelected => _selectedNavIndex == 7;
+    public bool IsCameraDetailSelected => _selectedNavIndex == 8;
+
+    public CameraViewModel? SelectedDetailCamera
+    {
+        get => _selectedDetailCamera;
+        set => SetProperty(ref _selectedDetailCamera, value);
+    }
 
     // Node Status Properties
     public string NodeStatusText { get => _nodeStatusText; private set => SetProperty(ref _nodeStatusText, value); }
@@ -132,9 +217,26 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public string ProcessorText { get => _processorText; private set => SetProperty(ref _processorText, value); }
     public string ActiveCamerasCountText { get => _activeCamerasCountText; private set => SetProperty(ref _activeCamerasCountText, value); }
     public string UptimeText { get => _uptimeText; private set => SetProperty(ref _uptimeText, value); }
+    public double AggregateFps { get => _aggregateFps; private set => SetProperty(ref _aggregateFps, value); }
+    public string CapacityStateText { get => _capacityStateText; private set => SetProperty(ref _capacityStateText, value); }
+
+    // KPI Counters
+    public int TotalCamerasCount => Cameras.Count;
+    public int RunningCamerasCount => Cameras.Count(c => c.IsRunning);
+    public int TotalActiveAnalyticsCount => Cameras.Sum(c => c.ActiveAnalyticsCount);
+    public int OpenAlertsCount => Alerts.Count(a => a.Status == AlertStatus.Open);
+    public int CriticalAlertsCount => Alerts.Count(a => a.Severity == AlertSeverity.Critical && a.Status == AlertStatus.Open);
 
     public bool IsNodeRunning => _hostController.IsRunning;
     public bool IsNodeBusy { get => _isNodeBusy; private set { if (SetProperty(ref _isNodeBusy, value)) UpdateCommandStates(); } }
+
+    // Add Camera Modal Properties
+    public bool IsAddCameraModalOpen { get => _isAddCameraModalOpen; set => SetProperty(ref _isAddCameraModalOpen, value); }
+    public string NewCameraName { get => _newCameraName; set => SetProperty(ref _newCameraName, value); }
+    public string NewCameraSource { get => _newCameraSource; set => SetProperty(ref _newCameraSource, value); }
+    public string NewCameraType { get => _newCameraType; set => SetProperty(ref _newCameraType, value); }
+    public bool NewCameraAutoStart { get => _newCameraAutoStart; set => SetProperty(ref _newCameraAutoStart, value); }
+    public string? AddCameraError { get => _addCameraError; set => SetProperty(ref _addCameraError, value); }
 
     // API & Remote Access Settings
     public bool IsLanAccess
@@ -198,37 +300,47 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     public string ApiKeyVisibilityButtonText => IsApiKeyVisible ? "Ocultar" : "Mostrar";
 
-    // Tab Navigation
-    public int SelectedRightTab
+    // Alerts Filter Properties
+    public string SelectedAlertSeverityFilter
     {
-        get => _selectedRightTab;
+        get => _selectedAlertSeverityFilter;
         set
         {
-            if (SetProperty(ref _selectedRightTab, value))
+            if (SetProperty(ref _selectedAlertSeverityFilter, value))
             {
-                OnPropertyChanged(nameof(IsWebConnectionTabSelected));
-                OnPropertyChanged(nameof(IsEventsTabSelected));
-                OnPropertyChanged(nameof(IsDiagnosticsTabSelected));
+                OnPropertyChanged(nameof(FilteredAlerts));
             }
         }
     }
 
-    public bool IsWebConnectionTabSelected
+    public string SelectedAlertStatusFilter
     {
-        get => _selectedRightTab == 0;
-        set { if (value) SelectedRightTab = 0; }
+        get => _selectedAlertStatusFilter;
+        set
+        {
+            if (SetProperty(ref _selectedAlertStatusFilter, value))
+            {
+                OnPropertyChanged(nameof(FilteredAlerts));
+            }
+        }
     }
 
-    public bool IsEventsTabSelected
+    public IEnumerable<AlertItemViewModel> FilteredAlerts
     {
-        get => _selectedRightTab == 1;
-        set { if (value) SelectedRightTab = 1; }
-    }
-
-    public bool IsDiagnosticsTabSelected
-    {
-        get => _selectedRightTab == 2;
-        set { if (value) SelectedRightTab = 2; }
+        get
+        {
+            var result = Alerts.AsEnumerable();
+            if (SelectedAlertSeverityFilter != "Todas")
+            {
+                result = result.Where(a => a.Severity.ToString().Equals(SelectedAlertSeverityFilter, StringComparison.OrdinalIgnoreCase));
+            }
+            if (SelectedAlertStatusFilter != "Todas")
+            {
+                result = result.Where(a => a.Status.ToString().Equals(SelectedAlertStatusFilter, StringComparison.OrdinalIgnoreCase)
+                    || a.StatusText.Equals(SelectedAlertStatusFilter, StringComparison.OrdinalIgnoreCase));
+            }
+            return result;
+        }
     }
 
     public NodeDiagnosticsReport? DiagnosticsReport { get => _diagnosticsReport; private set => SetProperty(ref _diagnosticsReport, value); }
@@ -242,12 +354,24 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public string ThemeButtonText => IsDarkTheme ? "Tema claro" : "Tema oscuro";
 
     // Commands
+    public IRelayCommand<int> NavigateCommand { get; }
+    public IAsyncRelayCommand<CameraViewModel> OpenCameraDetailCommand { get; }
+    public IRelayCommand BackToCamerasCommand { get; }
+
     public IAsyncRelayCommand StartNodeCommand { get; }
     public IAsyncRelayCommand StopNodeCommand { get; }
     public IAsyncRelayCommand RestartNodeCommand { get; }
     public IAsyncRelayCommand SwitchDeviceCommand { get; }
     public IAsyncRelayCommand RefreshHistoryCommand { get; }
     public IRelayCommand ToggleThemeCommand { get; }
+
+    public IRelayCommand ShowAddCameraModalCommand { get; }
+    public IRelayCommand CloseAddCameraModalCommand { get; }
+    public IAsyncRelayCommand AddCameraCommand { get; }
+
+    public IAsyncRelayCommand RefreshAlertsCommand { get; }
+    public IAsyncRelayCommand RefreshIntegrationsCommand { get; }
+    public IAsyncRelayCommand RefreshModelsCommand { get; }
 
     public IRelayCommand ToggleApiKeyVisibilityCommand { get; }
     public IRelayCommand CopyApiKeyCommand { get; }
@@ -261,7 +385,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public async Task InitializeAsync()
     {
         IsNodeBusy = true;
-        StatusMessage = "Iniciando Vision Edge Node...";
+        StatusMessage = "Iniciando VisionControl Edge...";
         try
         {
             var key = await _credentialStore.GetOrCreateApiKeyAsync();
@@ -287,6 +411,9 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             _pollTimer.Start();
             UpdateFromHostState();
             _ = SyncCamerasAsync();
+            _ = RefreshAlertsAsync();
+            _ = RefreshIntegrationsAsync();
+            _ = RefreshModelsAsync();
         }
     }
 
@@ -298,6 +425,16 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             : "No disponible (sin red LAN detectada)";
         OnPropertyChanged(nameof(HasLanAddress));
         OnPropertyChanged(nameof(ActiveConnectionUrl));
+    }
+
+    private async Task OpenDetailAsync(CameraViewModel? camera)
+    {
+        if (camera is null) return;
+        SelectedDetailCamera = camera;
+        SelectedNavIndex = 8;
+        await camera.InitializeZonesAsync();
+        await camera.LoadAssignedAnalyticsAsync();
+        await camera.RefreshEventsAsync();
     }
 
     private async Task StartNodeAsync()
@@ -389,6 +526,124 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    private async Task AddCameraAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewCameraName) || string.IsNullOrWhiteSpace(NewCameraSource))
+        {
+            AddCameraError = "El nombre y la fuente de video son requeridos.";
+            return;
+        }
+
+        if (_hostController.CameraStore is null || _hostController.CameraService is null)
+        {
+            AddCameraError = "El servicio de cámaras no está disponible.";
+            return;
+        }
+
+        try
+        {
+            var id = Guid.NewGuid().ToString("N")[..8];
+            var req = new CameraWriteRequest(
+                Id: id,
+                Name: NewCameraName.Trim(),
+                Source: NewCameraSource.Trim(),
+                Enabled: NewCameraAutoStart);
+
+            await _hostController.CameraService.CreateAsync(req);
+            await SyncCamerasAsync();
+
+            IsAddCameraModalOpen = false;
+            AddCameraError = null;
+            StatusMessage = $"Cámara '{req.Name}' añadida con éxito.";
+        }
+        catch (Exception ex)
+        {
+            AddCameraError = $"Error al añadir cámara: {ex.Message}";
+        }
+    }
+
+    public async Task RefreshAlertsAsync()
+    {
+        if (_hostController.AlertStore is null) return;
+        try
+        {
+            var list = await _hostController.AlertStore.QueryAsync(new HandRaise.Application.Rules.AlertQuery(Limit: 100));
+            Alerts.Clear();
+            foreach (var a in list)
+            {
+                Alerts.Add(new AlertItemViewModel(
+                    a,
+                    onAcknowledge: async id =>
+                    {
+                        await _hostController.AlertStore.AcknowledgeAsync(id, DateTimeOffset.UtcNow);
+                        OnPropertyChanged(nameof(OpenAlertsCount));
+                        OnPropertyChanged(nameof(CriticalAlertsCount));
+                        OnPropertyChanged(nameof(FilteredAlerts));
+                    },
+                    onResolve: async id =>
+                    {
+                        await _hostController.AlertStore.ResolveAsync(id, DateTimeOffset.UtcNow);
+                        OnPropertyChanged(nameof(OpenAlertsCount));
+                        OnPropertyChanged(nameof(CriticalAlertsCount));
+                        OnPropertyChanged(nameof(FilteredAlerts));
+                    }));
+            }
+            OnPropertyChanged(nameof(OpenAlertsCount));
+            OnPropertyChanged(nameof(CriticalAlertsCount));
+            OnPropertyChanged(nameof(FilteredAlerts));
+        }
+        catch
+        {
+        }
+    }
+
+    public async Task RefreshIntegrationsAsync()
+    {
+        try
+        {
+            if (_hostController.DestinationStore is { } destStore)
+            {
+                var dests = await destStore.ListAllAsync();
+                Destinations.Clear();
+                foreach (var d in dests) Destinations.Add(new DestinationItemViewModel(d));
+            }
+
+            if (_hostController.PolicyStore is { } polStore)
+            {
+                var pols = await polStore.ListAllAsync();
+                Policies.Clear();
+                foreach (var p in pols) Policies.Add(new PolicyItemViewModel(p));
+            }
+
+            if (_hostController.AttemptStore is { } attStore)
+            {
+                var atts = await attStore.QueryAsync(new HandRaise.Application.Notifications.NotificationAttemptQuery(Limit: 50));
+                Attempts.Clear();
+                foreach (var a in atts) Attempts.Add(new AttemptItemViewModel(a));
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    public async Task RefreshModelsAsync()
+    {
+        if (_hostController.ModelRegistry is null) return;
+        try
+        {
+            var models = _hostController.ModelRegistry.ListModels();
+            Models.Clear();
+            foreach (var m in models)
+            {
+                Models.Add(new ModelItemViewModel(m));
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private void OnPollTimerTick(object? sender, EventArgs e)
     {
         UpdateFromHostState();
@@ -402,7 +657,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         switch (_hostController.Status)
         {
             case NodeHostStatus.Running:
-                NodeStatusText = "Operativo";
+                NodeStatusText = "Nodo operativo";
                 NodeStatusBadgeBrush = new SolidColorBrush(Color.FromRgb(78, 190, 123)); // Green
                 ApiStatusText = "Disponible";
                 break;
@@ -437,6 +692,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             UptimeText = $"{ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
             var onlineCameras = snapshot.Cameras.Count(c => c.Online);
             ActiveCamerasCountText = $"{onlineCameras} {(onlineCameras == 1 ? "activa" : "activas")}";
+            AggregateFps = Math.Round(Cameras.Sum(c => c.FramesPerSecond), 1);
+            CapacityStateText = onlineCameras > 0 ? "Normal" : "Inactivo";
         }
 
         if (_hostController.RuntimeState is { } runtime)
@@ -473,6 +730,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 : "Fallido";
         }
 
+        OnPropertyChanged(nameof(TotalCamerasCount));
+        OnPropertyChanged(nameof(RunningCamerasCount));
+        OnPropertyChanged(nameof(TotalActiveAnalyticsCount));
+        OnPropertyChanged(nameof(OpenAlertsCount));
+        OnPropertyChanged(nameof(CriticalAlertsCount));
+
         UpdateCommandStates();
     }
 
@@ -491,6 +754,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             StatusMessage = message;
             UpdateFromHostState();
             await SyncCamerasAsync();
+            await RefreshAlertsAsync();
         });
     }
 
@@ -682,9 +946,21 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 }
                 else
                 {
-                    var newVm = new CameraViewModel(view, _hostController.CameraService, _dispatcher);
+                    var newVm = new CameraViewModel(
+                        view,
+                        _hostController.CameraService,
+                        _dispatcher,
+                        _hostController.AnalyticService,
+                        _hostController.AnalyticCatalog,
+                        _hostController.LineStore,
+                        _hostController.CapabilityPlanner,
+                        _hostController.CameraStore,
+                        _hostController.EventRepository,
+                        _configuration.Storage.SnapshotDirectory);
+
                     Cameras.Add(newVm);
                     await newVm.InitializeZonesAsync();
+                    await newVm.LoadAssignedAnalyticsAsync();
                     if (view.Enabled || view.Running)
                     {
                         await newVm.StartAsync();
@@ -694,7 +970,6 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         }
         catch
         {
-            // Error transitorio durante transición de nodo
         }
         finally
         {

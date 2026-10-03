@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Channels;
@@ -6,7 +7,15 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using HandRaise.Application.Analytics;
+using HandRaise.Application.Events;
+using HandRaise.Application.Inference;
+using HandRaise.Application.Lines;
+using HandRaise.Application.Storage;
 using HandRaise.Application.Zones;
+using HandRaise.Domain.Analytics;
+using HandRaise.Domain.Lines;
+using HandRaise.Domain.Zones;
 using HandRaise.Host.Services;
 
 namespace HandRaise.Desktop.ViewModels;
@@ -14,6 +23,13 @@ namespace HandRaise.Desktop.ViewModels;
 public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly ICameraManagementService _cameraService;
+    private readonly IAnalyticManagementService? _analyticService;
+    private readonly IAnalyticCatalog? _analyticCatalog;
+    private readonly ILineStore? _lineStore;
+    private readonly ICapabilityPlanner? _capabilityPlanner;
+    private readonly ICameraStore? _cameraStore;
+    private readonly IHandEventRepository? _eventRepository;
+    private readonly string _snapshotDirectory;
     private readonly Dispatcher _dispatcher;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
 
@@ -34,7 +50,12 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     private bool _isStreaming;
     private int _frameWidth;
     private int _frameHeight;
+    private int _openAlertsCount;
 
+    // Camera Detail Navigation Tab (0: Resumen, 1: Analíticas, 2: Zonas y Líneas, 3: Eventos, 4: Configuración, 5: Runtime Plan)
+    private int _detailTabIndex;
+
+    // Zones & Lines Editor State
     private bool _zonesInitialized;
     private bool _isEditingZones;
     private string _zoneName = string.Empty;
@@ -45,17 +66,60 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     private readonly Stack<IReadOnlyList<NormalizedZone>> _zoneHistory = new();
     private bool _dragSnapshotTaken;
 
+    // Lines Editor State
+    private IReadOnlyList<LineDefinition> _editorLines = [];
+    private LineDefinition? _selectedLine;
+    private string _newLineName = "Línea 1";
+    private LineDirectionMode _selectedLineDirection = LineDirectionMode.Bidirectional;
+    private string? _lineMessage;
+
+    // Catalog & Analytics
+    private AnalyticDefinition? _selectedCatalogAnalytic;
+
+    // Camera Configuration Editing
+    private string _editName;
+    private string _editSource;
+    private bool _editEnabled;
+    private string? _configMessage;
+
+    // Runtime Plan
+    private string _runtimePlanSummary = "Sin analíticas activas";
+    private string _requiredCapabilitiesSummary = "-";
+    private string _modelProviderSummary = "-";
+
     public CameraViewModel(
         CameraView camera,
         ICameraManagementService cameraService,
-        Dispatcher dispatcher)
+        Dispatcher dispatcher,
+        IAnalyticManagementService? analyticService = null,
+        IAnalyticCatalog? analyticCatalog = null,
+        ILineStore? lineStore = null,
+        ICapabilityPlanner? capabilityPlanner = null,
+        ICameraStore? cameraStore = null,
+        IHandEventRepository? eventRepository = null,
+        string snapshotDirectory = "data/snapshots")
     {
         _id = camera.Id;
         _name = camera.Name;
         _source = camera.Source;
         _autoStart = camera.Enabled;
+        _editName = camera.Name;
+        _editSource = camera.Source;
+        _editEnabled = camera.Enabled;
+
         _cameraService = cameraService;
+        _analyticService = analyticService;
+        _analyticCatalog = analyticCatalog;
+        _lineStore = lineStore;
+        _capabilityPlanner = capabilityPlanner;
+        _cameraStore = cameraStore;
+        _eventRepository = eventRepository;
+        _snapshotDirectory = snapshotDirectory;
         _dispatcher = dispatcher;
+
+        AssignedAnalytics = [];
+        AvailableCatalog = [];
+        CameraEvents = [];
 
         UpdateFromView(camera);
 
@@ -65,11 +129,24 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         UndoZoneCommand = new AsyncRelayCommand(UndoZoneAsync);
         DeleteZoneCommand = new AsyncRelayCommand(DeleteZoneAsync);
         NewZoneCommand = new RelayCommand(StartNewZone);
+
+        // Lines commands
+        AddLineCommand = new AsyncRelayCommand(AddLineAsync);
+        DeleteLineCommand = new AsyncRelayCommand(DeleteLineAsync);
+
+        // Analytics commands
+        AddAnalyticCommand = new AsyncRelayCommand(AddAnalyticAsync);
+        RefreshAnalyticsCommand = new AsyncRelayCommand(LoadAssignedAnalyticsAsync);
+
+        // Config commands
+        SaveConfigCommand = new AsyncRelayCommand(SaveConfigAsync);
+        RefreshEventsCommand = new AsyncRelayCommand(RefreshEventsAsync);
     }
 
     public string Id => _id;
     public string Name { get => _name; private set => SetProperty(ref _name, value); }
     public string SourceDescription => SanitizeSource(_source);
+    public string SourceType => DetectSourceType(_source);
     public bool AutoStart => _autoStart;
 
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
@@ -78,6 +155,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     public ImageSource? VideoImage { get => _videoImage; private set => SetProperty(ref _videoImage, value); }
     public int FrameWidth { get => _frameWidth; private set => SetProperty(ref _frameWidth, value); }
     public int FrameHeight { get => _frameHeight; private set => SetProperty(ref _frameHeight, value); }
+    public int OpenAlertsCount { get => _openAlertsCount; set => SetProperty(ref _openAlertsCount, value); }
 
     public bool IsRunning
     {
@@ -92,14 +170,45 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     }
 
     public string ButtonText => IsRunning ? "Detener" : "Iniciar";
-    public IAsyncRelayCommand ToggleCommand { get; }
+    public int ActiveAnalyticsCount => AssignedAnalytics.Count(a => a.Enabled);
 
-    public IRelayCommand ToggleZoneEditorCommand { get; }
-    public IAsyncRelayCommand CloseZoneCommand { get; }
-    public IAsyncRelayCommand UndoZoneCommand { get; }
-    public IAsyncRelayCommand DeleteZoneCommand { get; }
-    public IRelayCommand NewZoneCommand { get; }
+    // Detail Tabs
+    public int DetailTabIndex
+    {
+        get => _detailTabIndex;
+        set
+        {
+            if (SetProperty(ref _detailTabIndex, value))
+            {
+                OnPropertyChanged(nameof(IsResumenTabSelected));
+                OnPropertyChanged(nameof(IsAnalyticsTabSelected));
+                OnPropertyChanged(nameof(IsZonesTabSelected));
+                OnPropertyChanged(nameof(IsEventsTabSelected));
+                OnPropertyChanged(nameof(IsConfigTabSelected));
+                OnPropertyChanged(nameof(IsRuntimePlanTabSelected));
+            }
+        }
+    }
 
+    public bool IsResumenTabSelected { get => _detailTabIndex == 0; set { if (value) DetailTabIndex = 0; } }
+    public bool IsAnalyticsTabSelected { get => _detailTabIndex == 1; set { if (value) DetailTabIndex = 1; } }
+    public bool IsZonesTabSelected { get => _detailTabIndex == 2; set { if (value) DetailTabIndex = 2; } }
+    public bool IsEventsTabSelected { get => _detailTabIndex == 3; set { if (value) DetailTabIndex = 3; } }
+    public bool IsConfigTabSelected { get => _detailTabIndex == 4; set { if (value) DetailTabIndex = 4; } }
+    public bool IsRuntimePlanTabSelected { get => _detailTabIndex == 5; set { if (value) DetailTabIndex = 5; } }
+
+    // Collections
+    public ObservableCollection<CameraAnalyticItemViewModel> AssignedAnalytics { get; }
+    public ObservableCollection<AnalyticDefinition> AvailableCatalog { get; }
+    public ObservableCollection<EventItemViewModel> CameraEvents { get; }
+
+    public AnalyticDefinition? SelectedCatalogAnalytic
+    {
+        get => _selectedCatalogAnalytic;
+        set => SetProperty(ref _selectedCatalogAnalytic, value);
+    }
+
+    // Zones & Lines
     public bool IsEditingZones
     {
         get => _isEditingZones;
@@ -129,11 +238,48 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    public IReadOnlyList<LineDefinition> EditorLines { get => _editorLines; private set => SetProperty(ref _editorLines, value); }
+    public LineDefinition? SelectedLine { get => _selectedLine; set => SetProperty(ref _selectedLine, value); }
+    public string NewLineName { get => _newLineName; set => SetProperty(ref _newLineName, value); }
+    public LineDirectionMode SelectedLineDirection { get => _selectedLineDirection; set => SetProperty(ref _selectedLineDirection, value); }
+    public string? LineMessage { get => _lineMessage; private set => SetProperty(ref _lineMessage, value); }
+
+    // Config editing
+    public string EditName { get => _editName; set => SetProperty(ref _editName, value); }
+    public string EditSource { get => _editSource; set => SetProperty(ref _editSource, value); }
+    public bool EditEnabled { get => _editEnabled; set => SetProperty(ref _editEnabled, value); }
+    public string? ConfigMessage { get => _configMessage; private set => SetProperty(ref _configMessage, value); }
+
+    // Runtime Plan
+    public string RuntimePlanSummary { get => _runtimePlanSummary; private set => SetProperty(ref _runtimePlanSummary, value); }
+    public string RequiredCapabilitiesSummary { get => _requiredCapabilitiesSummary; private set => SetProperty(ref _requiredCapabilitiesSummary, value); }
+    public string ModelProviderSummary { get => _modelProviderSummary; private set => SetProperty(ref _modelProviderSummary, value); }
+
+    // Commands
+    public IAsyncRelayCommand ToggleCommand { get; }
+    public IRelayCommand ToggleZoneEditorCommand { get; }
+    public IAsyncRelayCommand CloseZoneCommand { get; }
+    public IAsyncRelayCommand UndoZoneCommand { get; }
+    public IAsyncRelayCommand DeleteZoneCommand { get; }
+    public IRelayCommand NewZoneCommand { get; }
+
+    public IAsyncRelayCommand AddLineCommand { get; }
+    public IAsyncRelayCommand DeleteLineCommand { get; }
+
+    public IAsyncRelayCommand AddAnalyticCommand { get; }
+    public IAsyncRelayCommand RefreshAnalyticsCommand { get; }
+    public IAsyncRelayCommand SaveConfigCommand { get; }
+    public IAsyncRelayCommand RefreshEventsCommand { get; }
+
     public void UpdateFromView(CameraView view)
     {
         Name = view.Name;
         _source = view.Source;
+        EditName = view.Name;
+        EditSource = view.Source;
+        EditEnabled = view.Enabled;
         OnPropertyChanged(nameof(SourceDescription));
+        OnPropertyChanged(nameof(SourceType));
 
         IsRunning = view.Running;
         if (!_isStreaming)
@@ -274,7 +420,6 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
                         }
                         catch
                         {
-                            // Ignorar frame corrupto
                         }
                     }
                 }
@@ -341,15 +486,182 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
             if (saved is not null)
             {
                 EditorZones = saved;
-                _zonesInitialized = true;
+            }
+            if (_lineStore is not null)
+            {
+                EditorLines = await _lineStore.ListByCameraAsync(Id);
+            }
+            _zonesInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            ZoneMessage = $"Error al cargar zonas/líneas: {ex.Message}";
+        }
+    }
+
+    public async Task LoadAssignedAnalyticsAsync()
+    {
+        if (_analyticService is null) return;
+        try
+        {
+            var instances = await _analyticService.ListByCameraAsync(Id) ?? [];
+            var catalog = _analyticCatalog?.GetAll() ?? [];
+
+            AvailableCatalog.Clear();
+            foreach (var item in catalog)
+            {
+                AvailableCatalog.Add(item);
+            }
+            if (AvailableCatalog.Count > 0 && SelectedCatalogAnalytic is null)
+            {
+                SelectedCatalogAnalytic = AvailableCatalog[0];
+            }
+
+            AssignedAnalytics.Clear();
+            foreach (var inst in instances)
+            {
+                var def = catalog.FirstOrDefault(d => d.Id == inst.AnalyticTypeId);
+                AssignedAnalytics.Add(new CameraAnalyticItemViewModel(
+                    inst,
+                    def,
+                    onToggle: async (instanceId, enabled) =>
+                    {
+                        await _analyticService.UpdateAsync(Id, instanceId, new CameraAnalyticWriteRequest(Enabled: enabled));
+                        UpdateRuntimePlan();
+                        OnPropertyChanged(nameof(ActiveAnalyticsCount));
+                    },
+                    onRemove: async (instanceId) =>
+                    {
+                        await _analyticService.DeleteAsync(Id, instanceId);
+                        await LoadAssignedAnalyticsAsync();
+                    }));
+            }
+            UpdateRuntimePlan();
+            OnPropertyChanged(nameof(ActiveAnalyticsCount));
+        }
+        catch
+        {
+        }
+    }
+
+    private void UpdateRuntimePlan()
+    {
+        var active = AssignedAnalytics.Where(a => a.Enabled).ToList();
+        if (active.Count == 0)
+        {
+            RuntimePlanSummary = "Sin analíticas activas";
+            RequiredCapabilitiesSummary = "Ninguna";
+            ModelProviderSummary = "Inactivo";
+            return;
+        }
+
+        var caps = active.Select(a => a.CapabilitiesSummary).Distinct();
+        RequiredCapabilitiesSummary = string.Join(", ", caps);
+        RuntimePlanSummary = $"{active.Count} analítica(s) activa(s): {string.Join(", ", active.Select(a => a.DisplayName))}";
+        ModelProviderSummary = "YoloPoseCapabilityProvider (DirectML / CPU Fallback)";
+    }
+
+    private async Task AddAnalyticAsync()
+    {
+        if (_analyticService is null || SelectedCatalogAnalytic is null) return;
+        try
+        {
+            var request = new CameraAnalyticWriteRequest(
+                Id: Guid.NewGuid().ToString("N")[..8],
+                AnalyticTypeId: SelectedCatalogAnalytic.Id,
+                Name: SelectedCatalogAnalytic.DisplayName,
+                Enabled: true);
+
+            await _analyticService.CreateAsync(Id, request);
+            await LoadAssignedAnalyticsAsync();
+        }
+        catch (Exception ex)
+        {
+            ConfigMessage = $"Error al añadir analítica: {ex.Message}";
+        }
+    }
+
+    private async Task AddLineAsync()
+    {
+        if (_lineStore is null || string.IsNullOrWhiteSpace(NewLineName)) return;
+        try
+        {
+            var line = new LineDefinition(
+                Id: Guid.NewGuid().ToString("N")[..8],
+                CameraId: Id,
+                Name: NewLineName.Trim(),
+                PointA: new Point2D(0.2, 0.5),
+                PointB: new Point2D(0.8, 0.5),
+                DirectionMode: SelectedLineDirection,
+                Enabled: true);
+
+            await _lineStore.SaveAsync(Id, line);
+            EditorLines = await _lineStore.ListByCameraAsync(Id);
+            LineMessage = $"Línea '{line.Name}' creada.";
+        }
+        catch (Exception ex)
+        {
+            LineMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteLineAsync()
+    {
+        if (_lineStore is null || SelectedLine is null) return;
+        try
+        {
+            await _lineStore.DeleteAsync(Id, SelectedLine.Id);
+            EditorLines = await _lineStore.ListByCameraAsync(Id);
+            SelectedLine = null;
+            LineMessage = "Línea eliminada.";
+        }
+        catch (Exception ex)
+        {
+            LineMessage = $"Error al eliminar: {ex.Message}";
+        }
+    }
+
+    public async Task RefreshEventsAsync()
+    {
+        if (_eventRepository is null) return;
+        try
+        {
+            var events = await _eventRepository.QueryAsync(new EventQuery(CameraId: Id, Limit: 50));
+            CameraEvents.Clear();
+            foreach (var ev in events)
+            {
+                CameraEvents.Add(EventItemViewModel.Create(ev, _snapshotDirectory));
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        try
+        {
+            var req = new CameraWriteRequest(
+                Id: Id,
+                Name: EditName.Trim(),
+                Source: EditSource.Trim(),
+                Enabled: EditEnabled);
+            var updated = await _cameraService.UpdateAsync(Id, req);
+            if (updated is not null)
+            {
+                Name = updated.Name;
+                _source = updated.Source;
+                ConfigMessage = "Configuración de cámara guardada.";
             }
         }
         catch (Exception ex)
         {
-            ZoneMessage = $"Error al cargar zonas: {ex.Message}";
+            ConfigMessage = $"Error al guardar: {ex.Message}";
         }
     }
 
+    // Zone Editor Logic
     public void AddZonePoint(NormalizedPoint point)
     {
         if (!IsEditingZones || SelectedZone is not null) return;
@@ -498,6 +810,15 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         {
             return "RTSP";
         }
+    }
+
+    private static string DetectSourceType(string source)
+    {
+        if (int.TryParse(source, out _)) return "USB (Cámara web)";
+        if (source.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase)) return "RTSP (IP Streaming)";
+        if (source.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || source.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) || source.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
+            return "Archivo de video";
+        return "Fuente personalizada";
     }
 
     public async ValueTask DisposeAsync()

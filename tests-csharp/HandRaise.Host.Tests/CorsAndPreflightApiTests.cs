@@ -18,17 +18,25 @@ public sealed class CorsAndPreflightApiTests
     public const string MaliciousRunAppOrigin = "https://malicious.run.app";
     public const string FakeEvilDomainOrigin = "https://ais-dev-fake.evil.com";
     public const string FakeSubdomainEvilOrigin = "https://ais-dev-fake.us-east1.run.app.evil.com";
+    public const string Localhost3000Origin = "http://localhost:3000";
+    public const string LocalIp3000Origin = "http://127.0.0.1:3000";
+    public const string Localhost3001Disallowed = "http://localhost:3001";
+    public const string LocalIp5173Disallowed = "http://127.0.0.1:5173";
     public const string InsecureHttpOrigin = "http://ais-dev-test.us-east1.run.app";
     public const string PrefixSpoofOrigin = "https://evil-ais-dev-test.us-east1.run.app";
-    public const string ConfiguredCustomOrigin = "http://localhost:3000";
+    public const string ConfiguredCustomOrigin = "http://localhost:4000";
     public const string ValidApiKey = "4f9b8c7e1a2d3e4f5a6b7c8d9e0f1a2b";
 
     [Theory]
     [InlineData(RealAiStudioPreviewOrigin, true)]
     [InlineData(ProductionOrigin, true)]
+    [InlineData(Localhost3000Origin, true)]
+    [InlineData(LocalIp3000Origin, true)]
     [InlineData(AiStudioPreOrigin, true)]
     [InlineData("https://ais-dev-test.run.app", true)]
     [InlineData("https://ais-pre-abc.run.app", true)]
+    [InlineData(Localhost3001Disallowed, false)]
+    [InlineData(LocalIp5173Disallowed, false)]
     [InlineData(MaliciousRunAppOrigin, false)]
     [InlineData(FakeEvilDomainOrigin, false)]
     [InlineData(FakeSubdomainEvilOrigin, false)]
@@ -104,11 +112,12 @@ public sealed class CorsAndPreflightApiTests
 
     [Theory]
     [InlineData(ProductionOrigin)]
+    [InlineData(Localhost3000Origin)]
+    [InlineData(LocalIp3000Origin)]
     [InlineData(AiStudioPreOrigin)]
-    [InlineData(ConfiguredCustomOrigin)]
     public async Task OptionsPreflightFromOtherAllowedOriginsReturnsCorsHeaders(string origin)
     {
-        await using var app = CreateApp(ValidApiKey, [ConfiguredCustomOrigin]);
+        await using var app = CreateApp(ValidApiKey);
         await app.StartAsync();
         var client = app.GetTestClient();
 
@@ -125,6 +134,8 @@ public sealed class CorsAndPreflightApiTests
     }
 
     [Theory]
+    [InlineData(Localhost3001Disallowed)]
+    [InlineData(LocalIp5173Disallowed)]
     [InlineData(MaliciousRunAppOrigin)]
     [InlineData(FakeEvilDomainOrigin)]
     [InlineData(FakeSubdomainEvilOrigin)]
@@ -198,6 +209,65 @@ public sealed class CorsAndPreflightApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Headers.Contains("Access-Control-Allow-Origin"));
         Assert.Equal(ProductionOrigin, response.Headers.GetValues("Access-Control-Allow-Origin").FirstOrDefault());
+    }
+
+    [Theory]
+    [InlineData(Localhost3000Origin)]
+    [InlineData(LocalIp3000Origin)]
+    public async Task GetHealthWithLocal3000OriginAndValidApiKeyReturns200WithCorsHeaders(string origin)
+    {
+        await using var app = CreateApp(ValidApiKey);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/health");
+        request.Headers.Add("Origin", origin);
+        request.Headers.Add("X-Api-Key", ValidApiKey);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.Contains("Access-Control-Allow-Origin"));
+        Assert.Equal(origin, response.Headers.GetValues("Access-Control-Allow-Origin").FirstOrDefault());
+    }
+
+    [Theory]
+    [InlineData(Localhost3000Origin)]
+    [InlineData(LocalIp3000Origin)]
+    public async Task GetHealthWithLocal3000OriginWithoutApiKeyReturns401WithCorsHeaders(string origin)
+    {
+        await using var app = CreateApp(ValidApiKey);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/health");
+        request.Headers.Add("Origin", origin);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.True(response.Headers.Contains("Access-Control-Allow-Origin"));
+        Assert.Equal(origin, response.Headers.GetValues("Access-Control-Allow-Origin").FirstOrDefault());
+    }
+
+    [Theory]
+    [InlineData(Localhost3000Origin)]
+    [InlineData(LocalIp3000Origin)]
+    public async Task GetHealthWithLocal3000OriginInvalidApiKeyReturns401WithCorsHeaders(string origin)
+    {
+        await using var app = CreateApp(ValidApiKey);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/health");
+        request.Headers.Add("Origin", origin);
+        request.Headers.Add("X-Api-Key", "bad-key");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.True(response.Headers.Contains("Access-Control-Allow-Origin"));
+        Assert.Equal(origin, response.Headers.GetValues("Access-Control-Allow-Origin").FirstOrDefault());
     }
 
     private static WebApplication CreateApp(string apiKey, string[]? allowedOrigins = null) =>

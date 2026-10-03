@@ -8,6 +8,8 @@ public static class CorsOriginValidator
 {
     public const string ProductionOrigin = "https://vision-control-module.ai.studio";
     public const string ProductionHost = "vision-control-module.ai.studio";
+    public const string Localhost3000Origin = "http://localhost:3000";
+    public const string LocalIp3000Origin = "http://127.0.0.1:3000";
 
     public static bool IsAllowedOrigin(
         string? origin,
@@ -21,7 +23,9 @@ public static class CorsOriginValidator
 
         var normalized = origin.Trim().TrimEnd('/');
 
-        if (string.Equals(normalized, ProductionOrigin, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(normalized, ProductionOrigin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, Localhost3000Origin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, LocalIp3000Origin, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

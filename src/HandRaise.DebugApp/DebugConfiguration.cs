@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using HandRaise.Application.Inference;
 using HandRaise.Domain.Detection;
+using HandRaise.Domain.Models;
 using HandRaise.Domain.Zones;
 using HandRaise.Infrastructure.Windows.Capture;
 using HandRaise.Application.Tracking;

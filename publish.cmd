@@ -32,7 +32,8 @@ copy /y "packaging\LEEME.txt" "dist\LEEME.txt" >nul
 if errorlevel 1 exit /b %errorlevel%
 if not exist "%OUTPUT%\data" mkdir "%OUTPUT%\data"
 
-if not exist "%OUTPUT%\HandRaise.Desktop.exe" exit /b 2
+if not exist "%OUTPUT%\VisionControl.Edge.exe" exit /b 2
+copy /y "%OUTPUT%\VisionControl.Edge.exe" "%OUTPUT%\HandRaise.Desktop.exe" >nul
 if not exist "%OUTPUT%\models\yolo26n-pose.onnx" exit /b 3
 if not exist "%OUTPUT%\models\model.manifest.json" exit /b 4
 if not exist "%OUTPUT%\appsettings.json" exit /b 5

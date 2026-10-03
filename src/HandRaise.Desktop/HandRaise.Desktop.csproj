@@ -5,6 +5,10 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>VisionControl.Edge</AssemblyName>
+    <Product>VisionControl Edge</Product>
+    <Title>VisionControl Edge</Title>
+    <Description>Nodo de Visión Artificial</Description>
     <Version>1.0.0</Version>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>

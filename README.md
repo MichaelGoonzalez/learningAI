@@ -10,7 +10,7 @@ El código de producción es C#/.NET 10; `app/`, `tests/`, `config.yaml` y scrip
 
 ## Estado y roadmap
 
-Pruebas actuales: **333** (99 Domain, 129 Application, 38 Infrastructure.Windows, 67 Host), todas superadas en Release.
+Pruebas actuales: **349** (99 Domain, 129 Application, 38 Infrastructure.Windows, 77 Host, 6 Desktop), todas superadas en Release.
 
 | Bloque | Estado |
 |---|---|
@@ -19,6 +19,7 @@ Pruebas actuales: **333** (99 Domain, 129 Application, 38 Infrastructure.Windows
 | E2–E5.5 | Catálogo real (5 analíticas: `hand_raise`, `person_presence`, `zone_intrusion`, `line_crossing`, `person_counting`), líneas virtuales (`lines.json`), freeze contractual (`SPATIAL_LINES_API_CONTRACT_V1.md`) y coexistencia. |
 | E6–E7 | Rules Engine, Alertas Operacionales y Notificaciones (`AlertRule`, `RuleEngine`, `NotificationPolicy`, `NotificationDestination`, Webhook HTTP, MQTT v3.1.1, `rules.json`, `alerts.json`, `notification-*.json`, `NOTIFICATIONS_API_CONTRACT_V1.md`). |
 | E8 | Multi-Model Runtime y Gestión de Capacidad (`IModelRegistry`, `ICapabilityPlanner`, `IInferenceCapabilityProvider`, lazy execution, ejecución compartida de capacidades, `GET /api/v1/models`, `GET /api/v1/cameras/{id}/runtime-plan`, `GET /api/v1/system/capacity` extendido). |
+| E9 | Rebranding VisionControl Edge y Rediseño Camera-Centric Desktop (`VisionControl.Edge.exe`, navegación lateral industrial 8 secciones, detalle de cámara por pestañas, overlay de zonas/líneas, analíticas en caliente, alertas, integraciones, modelos y diagnóstico). |
 | D2b pendiente | WebSocket de eventos/métricas y MJPEG; aceptar con reconexión y clientes simultáneos sin bloquear inferencia. |
 | D3 pendiente | Manifest/modelos v2 e importación/activar/revertir; aceptar cambio seguro y validación de hash/licencia. |
 | D4 pendiente | Módulos PackageCounting/ConveyorFlow; aceptar conteos deterministas con secuencias sintéticas. |
@@ -35,7 +36,7 @@ Pruebas actuales: **333** (99 Domain, 129 Application, 38 Infrastructure.Windows
 | `src/HandRaise.Domain` | Reglas puras de manos, máquina de estados, geometría de zonas, modelos y entidades analíticas. |
 | `src/HandRaise.Application` | Contratos, catálogo/instancias analíticas, inferencia abstracta, capability planner, tracking, pipelines y eventos. |
 | `src/HandRaise.Infrastructure.Windows` | OpenCV, Windows ML/ONNX, providers de inferencia, DXGI, SQLite, settings, almacén JSON y logs. |
-| `src/HandRaise.Desktop` | Aplicación WPF/MVVM y editor de zonas en proceso. |
+| `src/HandRaise.Desktop` | Consola de escritorio VisionControl Edge (WPF/MVVM camera-centric, analíticas, alertas e integraciones). |
 | `src/HandRaise.Host` | Generic Host/Kestrel, composición headless, gestión de analíticas, models API y REST. |
 | `src/HandRaise.DebugApp` | Consola de diagnóstico, grabación y benchmark. |
 | `src/HandRaise.DeviceProbe` | Inventario de hardware/runtimes. |

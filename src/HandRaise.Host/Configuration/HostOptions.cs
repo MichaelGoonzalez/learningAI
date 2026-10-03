@@ -44,7 +44,11 @@ public sealed class ApiOptions
     public string BindAddress { get; init; } = "127.0.0.1";
     public string ApiKeyHeader { get; init; } = "X-Api-Key";
     public string? ApiKey { get; set; }
-    public string[] AllowedOrigins { get; init; } = ["https://vision-control-module.ai.studio"];
+    public string[] AllowedOrigins { get; init; } = [
+        "https://vision-control-module.ai.studio",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ];
 }
 
 public sealed class ModelOptions

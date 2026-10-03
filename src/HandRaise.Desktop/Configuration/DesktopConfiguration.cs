@@ -5,6 +5,7 @@ using HandRaise.Application.Inference;
 using HandRaise.Application.Storage;
 using HandRaise.Application.Tracking;
 using HandRaise.Domain.Detection;
+using HandRaise.Domain.Models;
 using HandRaise.Domain.Zones;
 using HandRaise.Infrastructure.Windows.Capture;
 using HandRaise.Infrastructure.Windows.Storage;
