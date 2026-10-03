@@ -12,6 +12,7 @@ using HandRaise.Application.Tracking;
 using HandRaise.Application.Zones;
 using HandRaise.Domain.Analytics;
 using HandRaise.Domain.Detection;
+using HandRaise.Domain.Models;
 using HandRaise.Domain.Zones;
 using HandRaise.Host.Configuration;
 using HandRaise.Infrastructure.Windows.Capture;

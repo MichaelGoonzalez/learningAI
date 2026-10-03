@@ -87,6 +87,103 @@ public sealed class PipelineMetricsRegistry(
             cameras);
     }
 
+    public HandRaise.Domain.Models.ExtendedCapacitySnapshot ExtendedCapacity(
+        double targetFramesPerSecond,
+        string deviceName = "D3D12 GPU",
+        IReadOnlyList<HandRaise.Domain.Models.ModelDescriptor>? activeModels = null,
+        IReadOnlyDictionary<string, int>? cameraAnalyticsCounts = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? cameraProviders = null)
+    {
+        if (!double.IsFinite(targetFramesPerSecond) || targetFramesPerSecond <= 0)
+            throw new ArgumentOutOfRangeException(nameof(targetFramesPerSecond));
+
+        var cameraSnapshots = Cameras();
+        var models = activeModels ?? [];
+        var activeModelIds = models.Select(m => m.Id).ToList();
+        var estimatedVram = models.Sum(m => m.MemoryEstimateMb);
+
+        var cameraDetails = new List<HandRaise.Domain.Models.CameraCapacityDetail>();
+        double aggFps = 0;
+        double aggInferenceMs = 0;
+        int totalAnalytics = 0;
+
+        foreach (var cam in cameraSnapshots)
+        {
+            var analyticsCount = cameraAnalyticsCounts != null && cameraAnalyticsCounts.TryGetValue(cam.CameraId, out var count)
+                ? count
+                : 0;
+            var providers = cameraProviders != null && cameraProviders.TryGetValue(cam.CameraId, out var prov)
+                ? prov
+                : (IReadOnlyList<string>)(activeModelIds.Count > 0 ? activeModelIds : ["default"]);
+
+            totalAnalytics += analyticsCount;
+            aggFps += cam.FramesPerSecond;
+            aggInferenceMs += cam.AverageInferenceMilliseconds;
+
+            var dropRate = (cam.FramesProcessed + cam.FramesDropped) > 0
+                ? (double)cam.FramesDropped / (cam.FramesProcessed + cam.FramesDropped)
+                : 0.0;
+
+            var status = HandRaise.Domain.Models.CapacityStatus.Healthy;
+            if (cam.Online)
+            {
+                if (cam.FramesPerSecond < targetFramesPerSecond * 0.6 || dropRate > 0.15 || cam.AverageInferenceMilliseconds > (1000.0 / targetFramesPerSecond))
+                {
+                    status = HandRaise.Domain.Models.CapacityStatus.OverCapacity;
+                }
+                else if (cam.FramesPerSecond < targetFramesPerSecond * 0.85 || dropRate > 0.05 || cam.AverageInferenceMilliseconds > (1000.0 / targetFramesPerSecond) * 0.75)
+                {
+                    status = HandRaise.Domain.Models.CapacityStatus.NearCapacity;
+                }
+            }
+
+            cameraDetails.Add(new HandRaise.Domain.Models.CameraCapacityDetail(
+                CameraId: cam.CameraId,
+                TargetFps: targetFramesPerSecond,
+                ActualFps: cam.FramesPerSecond,
+                Providers: providers,
+                AnalyticsCount: analyticsCount,
+                InferenceMs: cam.AverageInferenceMilliseconds,
+                DroppedFrames: cam.FramesDropped,
+                Status: status));
+        }
+
+        var overallStatus = HandRaise.Domain.Models.CapacityStatus.Healthy;
+        if (cameraDetails.Any(c => c.Status == HandRaise.Domain.Models.CapacityStatus.OverCapacity))
+        {
+            overallStatus = HandRaise.Domain.Models.CapacityStatus.OverCapacity;
+        }
+        else if (cameraDetails.Any(c => c.Status == HandRaise.Domain.Models.CapacityStatus.NearCapacity))
+        {
+            overallStatus = HandRaise.Domain.Models.CapacityStatus.NearCapacity;
+        }
+
+        var legacyEstimates = cameraSnapshots.Select(cam =>
+        {
+            var cost = cam.AverageDecodeMilliseconds + cam.AverageInferenceMilliseconds;
+            return cost > 0
+                ? Math.Max(1, (int)Math.Floor(1000 / (targetFramesPerSecond * cost)))
+                : (int?)null;
+        }).Where(m => m.HasValue).Select(m => m!.Value).ToArray();
+
+        int? overallMaxCameras = legacyEstimates.Length == 0 ? null : legacyEstimates.Min();
+
+        return new HandRaise.Domain.Models.ExtendedCapacitySnapshot(
+            NodeId: nodeId,
+            SiteId: siteId,
+            Device: deviceName,
+            ActiveModels: activeModelIds,
+            EstimatedVramMb: estimatedVram,
+            AggregateFps: aggFps,
+            AggregateInferenceMs: aggInferenceMs,
+            CameraCount: cameraSnapshots.Count,
+            ActiveAnalyticCount: totalAnalytics,
+            CapacityStatus: overallStatus,
+            Cameras: cameraDetails,
+            TargetFramesPerSecond: targetFramesPerSecond,
+            EstimatedMaximumCameras: overallMaxCameras);
+    }
+
     private sealed class Entry(string cameraId, string name)
     {
         private readonly object _sync = new();

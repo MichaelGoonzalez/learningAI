@@ -4,16 +4,19 @@ using System.Text.Json;
 using System.Threading.Channels;
 using HandRaise.Application.Analytics;
 using HandRaise.Application.Events;
+using HandRaise.Application.Inference;
 using HandRaise.Application.Notifications;
 using HandRaise.Application.Pipelines;
 using HandRaise.Application.Rules;
 using HandRaise.Application.Storage;
 using HandRaise.Domain.Analytics;
+using HandRaise.Domain.Models;
 using HandRaise.Domain.Notifications;
 using HandRaise.Domain.Rules;
 using HandRaise.Host.Api;
 using HandRaise.Host.Configuration;
 using HandRaise.Host.Services;
+using HandRaise.Infrastructure.Windows.Inference;
 using HandRaise.Infrastructure.Windows.Notifications;
 using HandRaise.Infrastructure.Windows.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +50,41 @@ public static class HostApplication
         builder.Services.AddSingleton<DiagnosticsProvider>();
         if (!builder.Services.Any(item => item.ServiceType == typeof(IAnalyticCatalog)))
             builder.Services.AddSingleton<IAnalyticCatalog, StandardAnalyticCatalog>();
+        if (!builder.Services.Any(item => item.ServiceType == typeof(IModelRegistry)))
+        {
+            builder.Services.AddSingleton<IModelRegistry>(_ =>
+            {
+                var registry = new StandardModelRegistry();
+                var defaultModel = new ModelDescriptor(
+                    Id: "yolo26n-pose",
+                    DisplayName: "YOLO26 Nano Pose",
+                    Version: "1.0.0",
+                    Format: ModelFormat.Onnx,
+                    Capabilities: [InferenceCapability.PoseEstimation, InferenceCapability.ObjectDetection, InferenceCapability.Tracking],
+                    InputWidth: options.Model.InputWidth,
+                    InputHeight: options.Model.InputHeight,
+                    Path: options.Model.Path,
+                    ClassCount: options.Model.ClassCount,
+                    KeypointCount: options.Model.KeypointCount,
+                    ConfidenceThreshold: options.Model.ConfidenceThreshold,
+                    IouThreshold: options.Model.IouThreshold,
+                    MaximumDetections: options.Model.MaximumDetections,
+                    PreferredDevice: "gpu",
+                    MemoryEstimateMb: 150.0);
+
+                var defaultProvider = new YoloPoseCapabilityProvider(
+                    providerId: "yolo-pose-provider",
+                    modelId: "yolo26n-pose",
+                    modelVersion: "1.0.0",
+                    capabilities: [InferenceCapability.PoseEstimation, InferenceCapability.ObjectDetection, InferenceCapability.Tracking],
+                    preferredDevice: "gpu");
+
+                registry.RegisterModel(defaultModel, defaultProvider);
+                return registry;
+            });
+        }
+        if (!builder.Services.Any(item => item.ServiceType == typeof(ICapabilityPlanner)))
+            builder.Services.AddSingleton<ICapabilityPlanner, CapabilityPlanner>();
         if (!builder.Services.Any(item => item.ServiceType == typeof(IAnalyticEvaluatorFactory)))
             builder.Services.AddSingleton<IAnalyticEvaluatorFactory, AnalyticEvaluatorFactory>();
         if (!builder.Services.Any(item => item.ServiceType == typeof(IAnalyticInstanceStore)))
@@ -625,10 +663,52 @@ public static class HostApplication
             ICameraManagementService service, CancellationToken token) =>
             await service.UpdateZonesAsync(id, zones, token) ? Results.Ok(zones) : Results.NotFound());
         api.MapGet("/system/runtime", (HostRuntimeState runtime) => Results.Ok(runtime.Inventory.Runtime));
-        api.MapGet("/system/capacity", (
+        api.MapGet("/system/capacity", async (
             PipelineMetricsRegistry metrics,
-            Configuration.HostOptions options) =>
-            Results.Ok(metrics.Capacity(options.Capacity.TargetFramesPerSecond)));
+            Configuration.HostOptions options,
+            IModelRegistry registry,
+            IAnalyticInstanceStore analyticStore,
+            HostRuntimeState runtime,
+            CancellationToken token) =>
+        {
+            var activeModels = registry.ListModels();
+            var allInstances = await analyticStore.GetAllAsync(token);
+            var countsByCamera = allInstances
+                .Where(i => i.Enabled && i.Status == AnalyticStatus.Active)
+                .GroupBy(i => i.CameraId)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var extended = metrics.ExtendedCapacity(
+                options.Capacity.TargetFramesPerSecond,
+                deviceName: runtime.ActiveDeviceId ?? "D3D12 GPU",
+                activeModels: activeModels,
+                cameraAnalyticsCounts: countsByCamera);
+
+            return Results.Ok(extended);
+        });
+        api.MapGet("/models", (IModelRegistry registry) => Results.Ok(registry.ListModels()));
+        api.MapGet("/models/{id}", (string id, IModelRegistry registry) =>
+            registry.GetModel(id) is { } model
+                ? Results.Ok(model)
+                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Modelo no encontrado"));
+        api.MapGet("/cameras/{id}/runtime-plan", async (
+            string id,
+            ICapabilityPlanner planner,
+            IAnalyticInstanceStore analyticStore,
+            IAnalyticCatalog catalog,
+            ICameraManagementService cameraService,
+            CancellationToken token) =>
+        {
+            var camera = await cameraService.GetAsync(id, token);
+            if (camera is null)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Cámara no encontrada");
+            }
+
+            var instances = await analyticStore.GetByCameraIdAsync(id, token);
+            var plan = planner.CreatePlan(id, instances, catalog);
+            return Results.Ok(plan);
+        });
         api.MapPut("/system/device", async (DeviceChangeRequest request, ICameraManagementService service,
             CancellationToken token) =>
         {

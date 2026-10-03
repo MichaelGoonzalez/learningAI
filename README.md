@@ -10,7 +10,7 @@ El código de producción es C#/.NET 10; `app/`, `tests/`, `config.yaml` y scrip
 
 ## Estado y roadmap
 
-Pruebas actuales: **317** (90 Domain, 125 Application, 38 Infrastructure.Windows, 64 Host), todas superadas en Release.
+Pruebas actuales: **333** (99 Domain, 129 Application, 38 Infrastructure.Windows, 67 Host), todas superadas en Release.
 
 | Bloque | Estado |
 |---|---|
@@ -18,6 +18,7 @@ Pruebas actuales: **317** (90 Domain, 125 Application, 38 Infrastructure.Windows
 | E0–E1.5 | Evolución camera-centric, fundación genérica multi-analítica y freeze de contrato v1. |
 | E2–E5.5 | Catálogo real (5 analíticas: `hand_raise`, `person_presence`, `zone_intrusion`, `line_crossing`, `person_counting`), líneas virtuales (`lines.json`), freeze contractual (`SPATIAL_LINES_API_CONTRACT_V1.md`) y coexistencia. |
 | E6–E7 | Rules Engine, Alertas Operacionales y Notificaciones (`AlertRule`, `RuleEngine`, `NotificationPolicy`, `NotificationDestination`, Webhook HTTP, MQTT v3.1.1, `rules.json`, `alerts.json`, `notification-*.json`, `NOTIFICATIONS_API_CONTRACT_V1.md`). |
+| E8 | Multi-Model Runtime y Gestión de Capacidad (`IModelRegistry`, `ICapabilityPlanner`, `IInferenceCapabilityProvider`, lazy execution, ejecución compartida de capacidades, `GET /api/v1/models`, `GET /api/v1/cameras/{id}/runtime-plan`, `GET /api/v1/system/capacity` extendido). |
 | D2b pendiente | WebSocket de eventos/métricas y MJPEG; aceptar con reconexión y clientes simultáneos sin bloquear inferencia. |
 | D3 pendiente | Manifest/modelos v2 e importación/activar/revertir; aceptar cambio seguro y validación de hash/licencia. |
 | D4 pendiente | Módulos PackageCounting/ConveyorFlow; aceptar conteos deterministas con secuencias sintéticas. |
@@ -31,11 +32,11 @@ Pruebas actuales: **317** (90 Domain, 125 Application, 38 Infrastructure.Windows
 
 | Proyecto/ruta | Responsabilidad |
 |---|---|
-| `src/HandRaise.Domain` | Reglas puras de manos, máquina de estados, geometría de zonas y entidades analíticas. |
-| `src/HandRaise.Application` | Contratos, catálogo/instancias analíticas, inferencia abstracta, tracking, pipelines y eventos. |
-| `src/HandRaise.Infrastructure.Windows` | OpenCV, Windows ML/ONNX, DXGI, SQLite, settings, almacén JSON de analíticas y logs. |
+| `src/HandRaise.Domain` | Reglas puras de manos, máquina de estados, geometría de zonas, modelos y entidades analíticas. |
+| `src/HandRaise.Application` | Contratos, catálogo/instancias analíticas, inferencia abstracta, capability planner, tracking, pipelines y eventos. |
+| `src/HandRaise.Infrastructure.Windows` | OpenCV, Windows ML/ONNX, providers de inferencia, DXGI, SQLite, settings, almacén JSON y logs. |
 | `src/HandRaise.Desktop` | Aplicación WPF/MVVM y editor de zonas en proceso. |
-| `src/HandRaise.Host` | Generic Host/Kestrel, composición headless, gestión de analíticas y API REST. |
+| `src/HandRaise.Host` | Generic Host/Kestrel, composición headless, gestión de analíticas, models API y REST. |
 | `src/HandRaise.DebugApp` | Consola de diagnóstico, grabación y benchmark. |
 | `src/HandRaise.DeviceProbe` | Inventario de hardware/runtimes. |
 | `src/HandRaise.InferenceProbe` | Comparación de inferencia CPU/DirectML. |
@@ -50,7 +51,9 @@ Auth: lecturas requieren API key si está configurada; sin clave solo aceptan lo
 | Método | Ruta `/api/v1` | Auth | Descripción |
 |---|---|---|---|
 | GET | `/health`, `/metrics` | lectura | Salud/identidad y métricas. |
-| GET | `/devices`, `/system/runtime`, `/system/capacity` | lectura | Hardware, runtimes y capacidad estimada. |
+| GET | `/devices`, `/system/runtime`, `/system/capacity` | lectura | Hardware, runtimes y capacidad extendida del nodo. |
+| GET | `/models`, `/models/{id}` | lectura | Catálogo de modelos registrados y descriptores de capacidades. |
+| GET | `/cameras/{id}/runtime-plan` | lectura | Plan de ejecución y resolución de capacidades para una cámara. |
 | GET | `/analytics/catalog` | lectura | Catálogo de analíticas disponibles en el nodo. |
 | GET | `/cameras`, `/cameras/{id}` | lectura | Cámaras persistentes y estado. |
 | POST | `/cameras` | escritura | Crear cámara. |

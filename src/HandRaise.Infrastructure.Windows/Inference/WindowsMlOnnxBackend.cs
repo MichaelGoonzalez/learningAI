@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using HandRaise.Application.Hardware;
 using HandRaise.Application.Inference;
+using HandRaise.Domain.Models;
 using Microsoft.ML.OnnxRuntime;
 
 namespace HandRaise.Infrastructure.Windows.Inference;
