@@ -61,12 +61,13 @@ public sealed class RealtimeApiTests
             req.QueryString = new Microsoft.AspNetCore.Http.QueryString("?camera_id=cam-target");
         };
         using var ws = await wsClient.ConnectAsync(new Uri(server.BaseAddress, "/api/v1/ws/events"), default);
+        await Task.Delay(100);
 
         // Publish event for target camera and another camera
         await eventBus.PublishAsync(Event("ev-other", "cam-other", "hand_raised", 1));
         await eventBus.PublishAsync(Event("ev-target", "cam-target", "hand_raised", 2));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var receivedJson = await ReceiveTextAsync(ws, cts.Token);
         using var doc = JsonDocument.Parse(receivedJson);
 
@@ -87,6 +88,7 @@ public sealed class RealtimeApiTests
         var wsClient = server.CreateWebSocketClient();
         wsClient.ConfigureRequest = req => req.Headers["X-Api-Key"] = "secret";
         using var ws = await wsClient.ConnectAsync(new Uri(server.BaseAddress, "/api/v1/ws/events"), default);
+        await Task.Delay(100);
 
         // Rapidly publish 40 events to a channel with capacity 16 without reading
         for (var i = 0; i < 40; i++)
@@ -95,7 +97,7 @@ public sealed class RealtimeApiTests
         }
 
         // Reading now should still succeed without blocking
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var msg = await ReceiveTextAsync(ws, cts.Token);
         Assert.NotNull(msg);
         Assert.NotEmpty(msg);

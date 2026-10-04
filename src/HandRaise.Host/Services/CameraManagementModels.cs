@@ -31,7 +31,7 @@ public sealed record CameraView(
     string? Error);
 
 public sealed record CameraTestRequest(string Source, string? Username = null, string? Password = null);
-public sealed record CameraTestResult(bool Ok, string? Error, int? Width, int? Height, double? FramesPerSecond, double ConnectionMilliseconds);
+public sealed record CameraTestResult(bool Ok, string? Error, int? Width, int? Height, double? FramesPerSecond, double ConnectionMilliseconds, byte[]? PreviewJpeg = null);
 public sealed record DeviceChangeRequest(string DeviceId);
 public sealed record DeviceChangeResult(bool Success, string ActiveDeviceId, string? Error, double ElapsedMilliseconds);
 

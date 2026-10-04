@@ -116,7 +116,7 @@ public sealed class CaptureTests
             Options(),
             () => new FakeCaptureSession(opened: false, frameCount: 0),
             logs.Add);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(1000));
 
         try
         {

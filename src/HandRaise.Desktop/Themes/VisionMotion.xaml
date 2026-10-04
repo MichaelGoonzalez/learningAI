@@ -1,0 +1,15 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Motion Durations -->
+    <Duration x:Key="FastMotionDuration">0:0:0.150</Duration>
+    <Duration x:Key="StandardMotionDuration">0:0:0.250</Duration>
+    <Duration x:Key="SlowMotionDuration">0:0:0.400</Duration>
+
+    <!-- Fade In Animation Storyboard -->
+    <Storyboard x:Key="FadeInStoryboard">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                         From="0.0" To="1.0"
+                         Duration="{StaticResource FastMotionDuration}" />
+    </Storyboard>
+</ResourceDictionary>
+

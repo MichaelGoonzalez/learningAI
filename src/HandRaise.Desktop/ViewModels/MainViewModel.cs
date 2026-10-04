@@ -5,9 +5,11 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using HandRaise.Application.Capture;
 using HandRaise.Application.Events;
 using HandRaise.Application.Hardware;
 using HandRaise.Application.Inference;
@@ -18,6 +20,7 @@ using HandRaise.Desktop.Configuration;
 using HandRaise.Desktop.Services;
 using HandRaise.Domain.Rules;
 using HandRaise.Host.Services;
+using HandRaise.Infrastructure.Windows.Capture;
 using HandRaise.Infrastructure.Windows.Hardware;
 
 namespace HandRaise.Desktop.ViewModels;
@@ -27,6 +30,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly DesktopConfiguration _configuration;
     private readonly NodeHostController _hostController;
     private readonly INodeCredentialStore _credentialStore;
+    private readonly IVideoDeviceEnumerator _videoDeviceEnumerator;
     private readonly Dispatcher _dispatcher;
     private readonly Action<bool> _applyTheme;
     private readonly DispatcherTimer _pollTimer;
@@ -66,8 +70,22 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private string _apiKey = string.Empty;
     private bool _isApiKeyVisible;
 
-    // Add Camera Modal
+    // Add Camera Wizard State
     private bool _isAddCameraModalOpen;
+    private int _wizardStep = 1; // 1: Origen, 2: Configuración, 3: Probar, 4: Identidad y Guardar
+    private string _wizardSourceType = "USB"; // "USB", "RTSP", "File"
+    private string _wizardUsbIndex = "0";
+    private VideoDeviceInfo? _selectedUsbDevice;
+    private bool _isCustomUsbIndex;
+    private string _wizardRtspUrl = "rtsp://";
+    private string _wizardRtspUsername = string.Empty;
+    private string _wizardRtspPassword = string.Empty;
+    private string _wizardFilePath = string.Empty;
+    private bool _isTestingConnection;
+    private bool? _testConnectionSuccess;
+    private string? _testConnectionMessage;
+    private string? _testConnectionDetails;
+    private BitmapSource? _testPreviewImage;
     private string _newCameraName = "Cámara Nueva";
     private string _newCameraSource = "0";
     private string _newCameraType = "USB";
@@ -85,12 +103,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         NodeHostController hostController,
         Dispatcher dispatcher,
         Action<bool> applyTheme,
-        INodeCredentialStore? credentialStore = null)
+        INodeCredentialStore? credentialStore = null,
+        IVideoDeviceEnumerator? videoDeviceEnumerator = null)
     {
         _configuration = configuration;
         _hostController = hostController;
         _dispatcher = dispatcher;
         _applyTheme = applyTheme;
+        _videoDeviceEnumerator = videoDeviceEnumerator ?? new WindowsVideoDeviceEnumerator();
 
         var credPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -110,9 +130,20 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         SelectedCameraFilter = "Todas";
 
         // Navigation Commands
-        NavigateCommand = new RelayCommand<int>(index => SelectedNavIndex = index);
+        NavigateCommand = new RelayCommand<object?>(param =>
+        {
+            if (param is int i)
+            {
+                SelectedNavIndex = i;
+            }
+            else if (param is string s && int.TryParse(s, out var parsed))
+            {
+                SelectedNavIndex = parsed;
+            }
+        });
         OpenCameraDetailCommand = new AsyncRelayCommand<CameraViewModel>(OpenDetailAsync);
         BackToCamerasCommand = new RelayCommand(() => SelectedNavIndex = 1);
+        DeleteCameraCommand = new AsyncRelayCommand<CameraViewModel>(DeleteCameraAsync);
 
         // Node Controls
         StartNodeCommand = new AsyncRelayCommand(StartNodeAsync, () => !_isNodeBusy && !_hostController.IsRunning);
@@ -123,10 +154,17 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         RefreshHistoryCommand = new AsyncRelayCommand(RefreshHistoryAsync);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
 
-        // Camera Management
-        ShowAddCameraModalCommand = new RelayCommand(() => IsAddCameraModalOpen = true);
+        // Camera Wizard Management
+        ShowAddCameraModalCommand = new RelayCommand(OpenAddCameraWizard);
         CloseAddCameraModalCommand = new RelayCommand(() => IsAddCameraModalOpen = false);
+        NextWizardStepCommand = new RelayCommand(NextWizardStep);
+        PrevWizardStepCommand = new RelayCommand(PrevWizardStep);
+        TestWizardConnectionCommand = new AsyncRelayCommand(TestWizardConnectionAsync);
+        SaveWizardCameraCommand = new AsyncRelayCommand(SaveWizardCameraAsync);
         AddCameraCommand = new AsyncRelayCommand(AddCameraAsync);
+        BrowseVideoFileCommand = new RelayCommand(BrowseVideoFile);
+
+        DetectedUsbDevices = [];
 
         // Alerts & Integrations Commands
         RefreshAlertsCommand = new AsyncRelayCommand(RefreshAlertsAsync);
@@ -163,7 +201,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     public string AppTitle => "VisionControl Edge";
     public string AppSubtitle => "Nodo de Visión Artificial";
-    public string AboutText => $"VisionControl Edge · v{Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.0.0"}";
+    public string AboutText => $"VisionControl Edge · v{Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.9.0-rc.1"}";
 
     // Navigation Properties
     public int SelectedNavIndex
@@ -186,15 +224,51 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    public bool IsOverviewSelected => _selectedNavIndex == 0;
-    public bool IsCamerasSelected => _selectedNavIndex == 1;
-    public bool IsAlertsSelected => _selectedNavIndex == 2;
-    public bool IsIntegrationsSelected => _selectedNavIndex == 3;
-    public bool IsModelsSelected => _selectedNavIndex == 4;
-    public bool IsSystemSelected => _selectedNavIndex == 5;
-    public bool IsWebConnectionSelected => _selectedNavIndex == 6;
-    public bool IsDiagnosticsSelected => _selectedNavIndex == 7;
-    public bool IsCameraDetailSelected => _selectedNavIndex == 8;
+    public bool IsOverviewSelected
+    {
+        get => _selectedNavIndex == 0;
+        set { if (value) SelectedNavIndex = 0; }
+    }
+    public bool IsCamerasSelected
+    {
+        get => _selectedNavIndex == 1;
+        set { if (value) SelectedNavIndex = 1; }
+    }
+    public bool IsAlertsSelected
+    {
+        get => _selectedNavIndex == 2;
+        set { if (value) SelectedNavIndex = 2; }
+    }
+    public bool IsIntegrationsSelected
+    {
+        get => _selectedNavIndex == 3;
+        set { if (value) SelectedNavIndex = 3; }
+    }
+    public bool IsModelsSelected
+    {
+        get => _selectedNavIndex == 4;
+        set { if (value) SelectedNavIndex = 4; }
+    }
+    public bool IsSystemSelected
+    {
+        get => _selectedNavIndex == 5;
+        set { if (value) SelectedNavIndex = 5; }
+    }
+    public bool IsWebConnectionSelected
+    {
+        get => _selectedNavIndex == 6;
+        set { if (value) SelectedNavIndex = 6; }
+    }
+    public bool IsDiagnosticsSelected
+    {
+        get => _selectedNavIndex == 7;
+        set { if (value) SelectedNavIndex = 7; }
+    }
+    public bool IsCameraDetailSelected
+    {
+        get => _selectedNavIndex == 8;
+        set { if (value) SelectedNavIndex = 8; }
+    }
 
     public CameraViewModel? SelectedDetailCamera
     {
@@ -227,11 +301,174 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public int OpenAlertsCount => Alerts.Count(a => a.Status == AlertStatus.Open);
     public int CriticalAlertsCount => Alerts.Count(a => a.Severity == AlertSeverity.Critical && a.Status == AlertStatus.Open);
 
+    // Empty State Helpers
+    public bool HasCameras => Cameras.Count > 0;
+    public bool HasNoCameras => Cameras.Count == 0;
+    public bool HasAlerts => Alerts.Count > 0;
+    public bool HasNoAlerts => !FilteredAlerts.Any();
+    public bool HasDestinations => Destinations.Count > 0;
+    public bool HasNoDestinations => Destinations.Count == 0;
+    public bool HasPolicies => Policies.Count > 0;
+    public bool HasNoPolicies => Policies.Count == 0;
+    public bool HasAttempts => Attempts.Count > 0;
+    public bool HasNoAttempts => Attempts.Count == 0;
+    public bool HasModels => Models.Count > 0;
+    public bool HasNoModels => Models.Count == 0;
+
     public bool IsNodeRunning => _hostController.IsRunning;
     public bool IsNodeBusy { get => _isNodeBusy; private set { if (SetProperty(ref _isNodeBusy, value)) UpdateCommandStates(); } }
 
-    // Add Camera Modal Properties
+    // Add Camera Modal & Wizard Properties
     public bool IsAddCameraModalOpen { get => _isAddCameraModalOpen; set => SetProperty(ref _isAddCameraModalOpen, value); }
+    public int WizardStep
+    {
+        get => _wizardStep;
+        set
+        {
+            if (SetProperty(ref _wizardStep, value))
+            {
+                OnPropertyChanged(nameof(IsWizardStep1));
+                OnPropertyChanged(nameof(IsWizardStep2));
+                OnPropertyChanged(nameof(IsWizardStep3));
+                OnPropertyChanged(nameof(IsWizardStep4));
+            }
+        }
+    }
+    public bool IsWizardStep1 => _wizardStep == 1;
+    public bool IsWizardStep2 => _wizardStep == 2;
+    public bool IsWizardStep3 => _wizardStep == 3;
+    public bool IsWizardStep4 => _wizardStep == 4;
+
+    public string WizardSourceType
+    {
+        get => _wizardSourceType;
+        set
+        {
+            if (SetProperty(ref _wizardSourceType, value))
+            {
+                OnPropertyChanged(nameof(IsWizardUsb));
+                OnPropertyChanged(nameof(IsWizardRtsp));
+                OnPropertyChanged(nameof(IsWizardFile));
+                OnPropertyChanged(nameof(EffectiveWizardSource));
+            }
+        }
+    }
+    public bool IsWizardUsb
+    {
+        get => _wizardSourceType == "USB";
+        set { if (value) WizardSourceType = "USB"; }
+    }
+    public bool IsWizardRtsp
+    {
+        get => _wizardSourceType == "RTSP";
+        set { if (value) WizardSourceType = "RTSP"; }
+    }
+    public bool IsWizardFile
+    {
+        get => _wizardSourceType == "File";
+        set { if (value) WizardSourceType = "File"; }
+    }
+
+    public ObservableCollection<VideoDeviceInfo> DetectedUsbDevices { get; }
+
+    public VideoDeviceInfo? SelectedUsbDevice
+    {
+        get => _selectedUsbDevice;
+        set
+        {
+            if (SetProperty(ref _selectedUsbDevice, value) && value is not null)
+            {
+                WizardUsbIndex = value.Index.ToString();
+                if (string.IsNullOrWhiteSpace(NewCameraName) || NewCameraName == "Cámara Nueva")
+                {
+                    NewCameraName = value.Name;
+                }
+            }
+        }
+    }
+
+    public bool IsCustomUsbIndex
+    {
+        get => _isCustomUsbIndex;
+        set => SetProperty(ref _isCustomUsbIndex, value);
+    }
+
+    public string WizardUsbIndex
+    {
+        get => _wizardUsbIndex;
+        set { if (SetProperty(ref _wizardUsbIndex, value)) OnPropertyChanged(nameof(EffectiveWizardSource)); }
+    }
+    public string WizardRtspUrl
+    {
+        get => _wizardRtspUrl;
+        set { if (SetProperty(ref _wizardRtspUrl, value)) OnPropertyChanged(nameof(EffectiveWizardSource)); }
+    }
+    public string WizardRtspUsername
+    {
+        get => _wizardRtspUsername;
+        set => SetProperty(ref _wizardRtspUsername, value);
+    }
+    public string WizardRtspPassword
+    {
+        get => _wizardRtspPassword;
+        set => SetProperty(ref _wizardRtspPassword, value);
+    }
+    public string WizardFilePath
+    {
+        get => _wizardFilePath;
+        set { if (SetProperty(ref _wizardFilePath, value)) OnPropertyChanged(nameof(EffectiveWizardSource)); }
+    }
+
+    public BitmapSource? TestPreviewImage
+    {
+        get => _testPreviewImage;
+        private set
+        {
+            if (SetProperty(ref _testPreviewImage, value))
+            {
+                OnPropertyChanged(nameof(HasTestPreviewImage));
+            }
+        }
+    }
+
+    public bool HasTestPreviewImage => _testPreviewImage != null;
+
+    public string EffectiveWizardSource => _wizardSourceType switch
+    {
+        "USB" => _wizardUsbIndex,
+        "RTSP" => _wizardRtspUrl,
+        "File" => _wizardFilePath,
+        _ => _wizardUsbIndex
+    };
+
+    public bool IsTestingConnection { get => _isTestingConnection; private set => SetProperty(ref _isTestingConnection, value); }
+    public bool? TestConnectionSuccess
+    {
+        get => _testConnectionSuccess;
+        private set
+        {
+            if (SetProperty(ref _testConnectionSuccess, value))
+            {
+                OnPropertyChanged(nameof(HasTestedSuccessfully));
+            }
+        }
+    }
+    public bool HasTestedSuccessfully => _testConnectionSuccess == true;
+    public string? TestConnectionMessage { get => _testConnectionMessage; private set => SetProperty(ref _testConnectionMessage, value); }
+    public string? TestConnectionDetails { get => _testConnectionDetails; private set => SetProperty(ref _testConnectionDetails, value); }
+
+    public bool IsStep2Valid => _wizardSourceType switch
+    {
+        "USB" => int.TryParse(_wizardUsbIndex?.Trim(), out var idx) && idx >= 0,
+        "RTSP" => !string.IsNullOrWhiteSpace(_wizardRtspUrl) &&
+                  (_wizardRtspUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase) ||
+                   _wizardRtspUrl.StartsWith("rtsps://", StringComparison.OrdinalIgnoreCase)),
+        "File" => !string.IsNullOrWhiteSpace(_wizardFilePath),
+        _ => false
+    };
+
+    public bool CanSaveCamera => !string.IsNullOrWhiteSpace(NewCameraName) && IsStep2Valid;
+
     public string NewCameraName { get => _newCameraName; set => SetProperty(ref _newCameraName, value); }
     public string NewCameraSource { get => _newCameraSource; set => SetProperty(ref _newCameraSource, value); }
     public string NewCameraType { get => _newCameraType; set => SetProperty(ref _newCameraType, value); }
@@ -354,9 +591,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public string ThemeButtonText => IsDarkTheme ? "Tema claro" : "Tema oscuro";
 
     // Commands
-    public IRelayCommand<int> NavigateCommand { get; }
+    public IRelayCommand<object?> NavigateCommand { get; }
     public IAsyncRelayCommand<CameraViewModel> OpenCameraDetailCommand { get; }
     public IRelayCommand BackToCamerasCommand { get; }
+    public IAsyncRelayCommand<CameraViewModel> DeleteCameraCommand { get; }
 
     public IAsyncRelayCommand StartNodeCommand { get; }
     public IAsyncRelayCommand StopNodeCommand { get; }
@@ -367,7 +605,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     public IRelayCommand ShowAddCameraModalCommand { get; }
     public IRelayCommand CloseAddCameraModalCommand { get; }
+    public IRelayCommand NextWizardStepCommand { get; }
+    public IRelayCommand PrevWizardStepCommand { get; }
+    public IAsyncRelayCommand TestWizardConnectionCommand { get; }
+    public IAsyncRelayCommand SaveWizardCameraCommand { get; }
     public IAsyncRelayCommand AddCameraCommand { get; }
+    public IRelayCommand BrowseVideoFileCommand { get; }
 
     public IAsyncRelayCommand RefreshAlertsCommand { get; }
     public IAsyncRelayCommand RefreshIntegrationsCommand { get; }
@@ -526,11 +769,201 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private async Task AddCameraAsync()
+    private void OpenAddCameraWizard()
     {
-        if (string.IsNullOrWhiteSpace(NewCameraName) || string.IsNullOrWhiteSpace(NewCameraSource))
+        WizardStep = 1;
+        WizardSourceType = "USB";
+        WizardUsbIndex = "0";
+        IsCustomUsbIndex = false;
+        WizardRtspUrl = "rtsp://";
+        WizardRtspUsername = string.Empty;
+        WizardRtspPassword = string.Empty;
+        WizardFilePath = string.Empty;
+        NewCameraName = "Cámara Nueva";
+        NewCameraAutoStart = true;
+        AddCameraError = null;
+        TestConnectionSuccess = null;
+        TestConnectionMessage = null;
+        TestConnectionDetails = null;
+        TestPreviewImage = null;
+        IsAddCameraModalOpen = true;
+        _ = PopulateDetectedUsbDevicesAsync();
+    }
+
+    public async Task PopulateDetectedUsbDevicesAsync()
+    {
+        try
         {
-            AddCameraError = "El nombre y la fuente de video son requeridos.";
+            var devices = await _videoDeviceEnumerator.EnumerateDevicesAsync();
+            DetectedUsbDevices.Clear();
+            foreach (var dev in devices)
+            {
+                DetectedUsbDevices.Add(dev);
+            }
+            if (DetectedUsbDevices.Count > 0 && (SelectedUsbDevice is null || !DetectedUsbDevices.Contains(SelectedUsbDevice)))
+            {
+                SelectedUsbDevice = DetectedUsbDevices[0];
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void BrowseVideoFile()
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Seleccionar archivo de video",
+                Filter = "Archivos de video (*.mp4;*.mkv;*.avi;*.mov)|*.mp4;*.mkv;*.avi;*.mov|Todos los archivos (*.*)|*.*",
+                CheckFileExists = true
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                WizardFilePath = dialog.FileName;
+                if (string.IsNullOrWhiteSpace(NewCameraName) || NewCameraName == "Cámara Nueva")
+                {
+                    NewCameraName = Path.GetFileNameWithoutExtension(dialog.FileName);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static BitmapSource DecodeJpeg(byte[] bytes)
+    {
+        using var stream = new MemoryStream(bytes);
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    private void NextWizardStep()
+    {
+        AddCameraError = null;
+        if (WizardStep == 2)
+        {
+            if (!IsStep2Valid)
+            {
+                AddCameraError = WizardSourceType switch
+                {
+                    "USB" => "El índice USB debe ser un número entero mayor o igual a 0 (ej. 0, 1).",
+                    "RTSP" => "La URL RTSP debe comenzar con 'rtsp://' o 'rtsps://'.",
+                    "File" => "Debe ingresar una ruta de archivo de video válida.",
+                    _ => "Configuración de origen no válida."
+                };
+                return;
+            }
+        }
+
+        if (WizardStep < 4)
+        {
+            WizardStep++;
+            if (WizardStep == 3 && TestConnectionSuccess is null)
+            {
+                _ = TestWizardConnectionAsync();
+            }
+        }
+    }
+
+    private void PrevWizardStep()
+    {
+        AddCameraError = null;
+        if (WizardStep > 1)
+        {
+            WizardStep--;
+        }
+    }
+
+    private async Task TestWizardConnectionAsync()
+    {
+        if (_hostController.CameraService is null)
+        {
+            TestConnectionSuccess = false;
+            TestConnectionMessage = "Servicio de cámaras no disponible.";
+            TestConnectionDetails = "El host no se encuentra en ejecución.";
+            TestPreviewImage = null;
+            return;
+        }
+
+        IsTestingConnection = true;
+        TestConnectionSuccess = null;
+        TestConnectionMessage = "Probando conexión con la fuente...";
+        TestConnectionDetails = null;
+        TestPreviewImage = null;
+
+        try
+        {
+            var req = new CameraTestRequest(
+                Source: EffectiveWizardSource,
+                Username: string.IsNullOrWhiteSpace(WizardRtspUsername) ? null : WizardRtspUsername,
+                Password: string.IsNullOrWhiteSpace(WizardRtspPassword) ? null : WizardRtspPassword);
+
+            var result = await _hostController.CameraService.TestAsync(req);
+            if (result.Ok)
+            {
+                TestConnectionSuccess = true;
+                TestConnectionMessage = "¡Cámara lista y verificada!";
+                TestConnectionDetails = $"{result.Width}x{result.Height} @ {result.FramesPerSecond:F1} FPS ({result.ConnectionMilliseconds:F0} ms)";
+                if (result.PreviewJpeg != null)
+                {
+                    try
+                    {
+                        TestPreviewImage = DecodeJpeg(result.PreviewJpeg);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            else
+            {
+                TestConnectionSuccess = false;
+                TestConnectionMessage = "Fallo en la prueba de conexión:";
+                TestConnectionDetails = result.Error ?? "La cámara no entregó cuadros de video.";
+                TestPreviewImage = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            TestConnectionSuccess = false;
+            TestConnectionMessage = "Error inesperado al probar:";
+            TestConnectionDetails = ex.Message;
+            TestPreviewImage = null;
+        }
+        finally
+        {
+            IsTestingConnection = false;
+        }
+    }
+
+    private async Task SaveWizardCameraAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewCameraName))
+        {
+            AddCameraError = "El nombre de la cámara es requerido.";
+            return;
+        }
+
+        if (!IsStep2Valid)
+        {
+            AddCameraError = "La configuración de la fuente de video no es válida.";
+            return;
+        }
+
+        var source = EffectiveWizardSource;
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            AddCameraError = "La fuente de video es requerida.";
             return;
         }
 
@@ -546,8 +979,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             var req = new CameraWriteRequest(
                 Id: id,
                 Name: NewCameraName.Trim(),
-                Source: NewCameraSource.Trim(),
-                Enabled: NewCameraAutoStart);
+                Source: source.Trim(),
+                Enabled: NewCameraAutoStart,
+                Username: string.IsNullOrWhiteSpace(WizardRtspUsername) ? null : WizardRtspUsername,
+                Password: string.IsNullOrWhiteSpace(WizardRtspPassword) ? null : WizardRtspPassword);
 
             await _hostController.CameraService.CreateAsync(req);
             await SyncCamerasAsync();
@@ -555,10 +990,53 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             IsAddCameraModalOpen = false;
             AddCameraError = null;
             StatusMessage = $"Cámara '{req.Name}' añadida con éxito.";
+
+            // Navigate to camera detail immediately (Camera-first flow)
+            var created = Cameras.FirstOrDefault(c => c.Id == id);
+            if (created is not null)
+            {
+                await OpenDetailAsync(created);
+            }
         }
         catch (Exception ex)
         {
             AddCameraError = $"Error al añadir cámara: {ex.Message}";
+        }
+    }
+
+    private async Task AddCameraAsync()
+    {
+        await SaveWizardCameraAsync();
+    }
+
+    private async Task DeleteCameraAsync(CameraViewModel? camera)
+    {
+        if (camera is null || _hostController.CameraService is null) return;
+
+        var result = MessageBox.Show(
+            $"¿Está seguro de que desea eliminar la cámara '{camera.Name}'?",
+            "Confirmar eliminación",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await _hostController.CameraService.DeleteAsync(camera.Id);
+            await SyncCamerasAsync();
+
+            if (SelectedDetailCamera?.Id == camera.Id)
+            {
+                SelectedDetailCamera = null;
+                SelectedNavIndex = 1;
+            }
+
+            StatusMessage = $"Cámara '{camera.Name}' eliminada.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error al eliminar cámara: {ex.Message}";
         }
     }
 
@@ -591,6 +1069,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             OnPropertyChanged(nameof(OpenAlertsCount));
             OnPropertyChanged(nameof(CriticalAlertsCount));
             OnPropertyChanged(nameof(FilteredAlerts));
+            OnPropertyChanged(nameof(HasAlerts));
+            OnPropertyChanged(nameof(HasNoAlerts));
         }
         catch
         {
@@ -606,6 +1086,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 var dests = await destStore.ListAllAsync();
                 Destinations.Clear();
                 foreach (var d in dests) Destinations.Add(new DestinationItemViewModel(d));
+                OnPropertyChanged(nameof(HasDestinations));
+                OnPropertyChanged(nameof(HasNoDestinations));
             }
 
             if (_hostController.PolicyStore is { } polStore)
@@ -613,6 +1095,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 var pols = await polStore.ListAllAsync();
                 Policies.Clear();
                 foreach (var p in pols) Policies.Add(new PolicyItemViewModel(p));
+                OnPropertyChanged(nameof(HasPolicies));
+                OnPropertyChanged(nameof(HasNoPolicies));
             }
 
             if (_hostController.AttemptStore is { } attStore)
@@ -620,6 +1104,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 var atts = await attStore.QueryAsync(new HandRaise.Application.Notifications.NotificationAttemptQuery(Limit: 50));
                 Attempts.Clear();
                 foreach (var a in atts) Attempts.Add(new AttemptItemViewModel(a));
+                OnPropertyChanged(nameof(HasAttempts));
+                OnPropertyChanged(nameof(HasNoAttempts));
             }
         }
         catch
@@ -638,6 +1124,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             {
                 Models.Add(new ModelItemViewModel(m));
             }
+            OnPropertyChanged(nameof(HasModels));
+            OnPropertyChanged(nameof(HasNoModels));
         }
         catch
         {
@@ -735,6 +1223,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         OnPropertyChanged(nameof(TotalActiveAnalyticsCount));
         OnPropertyChanged(nameof(OpenAlertsCount));
         OnPropertyChanged(nameof(CriticalAlertsCount));
+        OnPropertyChanged(nameof(HasCameras));
+        OnPropertyChanged(nameof(HasNoCameras));
 
         UpdateCommandStates();
     }

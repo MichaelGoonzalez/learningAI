@@ -228,8 +228,20 @@ public sealed class HeadlessEngineService(
             timeout.CancelAfter(options.Capture.OpenTimeoutMs + options.Capture.ReadTimeoutMs);
             await foreach (var frame in video.ReadAllAsync(timeout.Token))
             {
-                using (frame) return new(true, null, frame.Width, frame.Height, video.FramesPerSecond,
-                    Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                using (frame)
+                {
+                    byte[]? previewJpeg = null;
+                    try
+                    {
+                        previewJpeg = OpenCvFrameJpegEncoder.Encode(frame, 75);
+                    }
+                    catch
+                    {
+                    }
+
+                    return new(true, null, frame.Width, frame.Height, video.FramesPerSecond,
+                        Stopwatch.GetElapsedTime(started).TotalMilliseconds, previewJpeg);
+                }
             }
             return new(false, "La fuente no entregó frames.", null, null, null, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }

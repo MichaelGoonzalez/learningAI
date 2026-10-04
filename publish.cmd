@@ -17,7 +17,9 @@ if not exist "models\model.manifest.json" (
   exit /b 1
 )
 
-if exist "%OUTPUT%" rmdir /s /q "%OUTPUT%"
+taskkill /f /im VisionControl.Edge.exe /im HandRaise.Desktop.exe /im HandRaise.Host.exe >nul 2>&1
+
+if exist "%OUTPUT%" rmdir /s /q "%OUTPUT%" >nul 2>&1
 if not exist "dist" mkdir "dist"
 
 "%DOTNET_EXE%" restore src\HandRaise.Desktop\HandRaise.Desktop.csproj --runtime win-x64 --configfile NuGet.Config
