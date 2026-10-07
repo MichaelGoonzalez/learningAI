@@ -6,9 +6,9 @@
 - [x] Verificación de archivos fuente sin ficheros vacíos de 0 bytes.
 
 ## 2. Publicación y Empaquetado
-- [x] Script `publish.cmd` genera `dist\HandRaise\VisionControl.Edge.exe`.
+- [x] Script `publish.cmd` genera `dist\VisionControl.Edge\VisionControl.Edge.exe`.
 - [x] Inclusión de dependencias nativas (OpenCvSharpExtern, OnnxRuntime DirectML/CPU).
-- [x] Modelos y manifiestos presentes en `dist\HandRaise\models\`.
+- [x] Modelos y manifiestos presentes en `dist\VisionControl.Edge\models\`.
 - [x] Exclusión de código fuente, artefactos temporales y secretos en `dist\`.
 
 ## 3. Seguridad y Configuración

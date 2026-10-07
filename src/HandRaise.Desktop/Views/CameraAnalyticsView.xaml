@@ -1,0 +1,467 @@
+<UserControl x:Class="HandRaise.Desktop.Views.CameraAnalyticsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="750" d:DesignWidth="900">
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,0,24">
+                <!-- NEXT BEST ACTION BANNER (Shown upon AI solution activation) -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionAccent}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Margin="0,0,0,16"
+                        Visibility="{Binding AiSuccessBannerVisible, Converter={StaticResource BooleanToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Width="32" Height="32" Background="{DynamicResource VisionSuccess}" CornerRadius="16" VerticalAlignment="Center">
+                            <TextBlock Text="OK" FontSize="11" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding AiSuccessMessage}"
+                                       FontSize="14"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource VisionTextPrimary}"/>
+                            <TextBlock Text="Siguiente paso recomendado: Configure una regla de alerta para recibir notificaciones automáticas."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <!-- Action 1: Create rule -->
+                        <Button Grid.Column="3"
+                                Content="Crear regla de alerta"
+                                Command="{Binding GoToRulesCommand}"
+                                Padding="14,7"
+                                FontWeight="Bold"/>
+
+                        <!-- Action 2: Go to monitor -->
+                        <Button Grid.Column="5"
+                                Content="Volver al Monitor"
+                                Command="{Binding GoToMonitorCommand}"
+                                Background="{DynamicResource VisionSurface}"
+                                Padding="12,7"
+                                FontWeight="SemiBold"/>
+
+                        <!-- Action 3: Dismiss -->
+                        <Button Grid.Column="7"
+                                Content="Cerrar"
+                                Command="{Binding DismissAiSuccessBannerCommand}"
+                                Background="Transparent"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource VisionBorder}"
+                                Foreground="{DynamicResource VisionTextSecondary}"
+                                FontSize="11"
+                                Padding="8,4"/>
+                    </Grid>
+                </Border>
+
+                <!-- Top Header -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Soluciones de Inteligencia Artificial"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"/>
+                        <TextBlock Text="Active y configure modelos de visión computacional aplicados a esta cámara"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Content="+ Agregar Solución IA"
+                            Command="{Binding OpenAddAiModalCommand}"
+                            Padding="16,8"
+                            FontWeight="SemiBold"/>
+                </Grid>
+
+                <!-- Runtime Capability / Planner summary badge -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionBorder}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14"
+                        Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="PLAN DE EJECUCIÓN DEL MOTOR IA"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding RuntimePlanSummary}"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource VisionAccent}"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding RequiredCapabilitiesSummary}"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Empty State -->
+                <components:EmptyState Title="No hay soluciones IA activas"
+                                       Description="Esta cámara no tiene modelos de visión artificial configurados. Agregue una solución para detectar manos levantadas, cruce de líneas, presencia en zonas o intrusión."
+                                       ActionText="+ Agregar Primera Solución IA"
+                                       ActionCommand="{Binding OpenAddAiModalCommand}"
+                                       Visibility="{Binding HasNoConfiguredAnalytics, Converter={StaticResource BooleanToVisibility}}"
+                                       Margin="0,0,0,20"/>
+
+                <!-- Configured Analytics List -->
+                <ItemsControl ItemsSource="{Binding ConfiguredAnalytics}"
+                              Visibility="{Binding HasConfiguredAnalytics, Converter={StaticResource BooleanToVisibility}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource VisionCardBackground}"
+                                    BorderBrush="{DynamicResource VisionBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16"
+                                    Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="12"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Top Row: Title, Status, Toggle Switch -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                            <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                        </StackPanel>
+
+                                        <components:StatusBadge Grid.Column="1"
+                                                               Text="{Binding StatusText}"
+                                                               Status="{Binding StatusText}"
+                                                               VerticalAlignment="Center"/>
+
+                                        <CheckBox Grid.Column="3"
+                                                  IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                  Content="Activa"
+                                                  VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <!-- Bottom Row: Parameters, Zone/Line target, Actions -->
+                                    <Border Grid.Row="2"
+                                            Background="{DynamicResource VisionSurface}"
+                                            CornerRadius="6"
+                                            Padding="12,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="12"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="Confianza Mínima: " FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                <TextBlock Text="{Binding MinConfidence, StringFormat='{}{0:P0}'}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,0,16,0"/>
+
+                                                <TextBlock Text="Espacio Objetivo: " FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                <TextBlock Text="{Binding TargetZoneName, TargetNullValue='(Toda la escena)'}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                            </StackPanel>
+
+                                            <!-- Link to Rules for this analytic -->
+                                            <Button Grid.Column="1"
+                                                    Content="Ver Reglas"
+                                                    Command="{Binding DataContext.GoToRulesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Background="Transparent"
+                                                    BorderThickness="1"
+                                                    BorderBrush="{DynamicResource VisionBorder}"
+                                                    Padding="10,4"
+                                                    FontSize="11"
+                                                    VerticalAlignment="Center"/>
+
+                                            <Button Grid.Column="3"
+                                                    Content="Eliminar"
+                                                    Command="{Binding DataContext.RemoveAnalyticCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="Transparent"
+                                                    Foreground="{DynamicResource VisionDanger}"
+                                                    BorderThickness="0"
+                                                    Padding="8,4"
+                                                    FontSize="11"
+                                                    VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- MODAL: ASISTENTE AÑADIR SOLUCIÓN IA (4-STEP AI WIZARD OVERLAY) -->
+        <Grid Background="#CC000000" Visibility="{Binding IsAddAiModalOpen, Converter={StaticResource BooleanToVisibility}}">
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="24"
+                    Width="560"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <!-- Wizard Header -->
+                    <TextBlock Text="ASISTENTE DE SOLUCIÓN IA" FontSize="16" FontWeight="Bold" Margin="0,0,0,2"/>
+                    <TextBlock Text="Active y configure modelos de visión computacional aplicados a esta cámara."
+                               Foreground="{DynamicResource VisionTextSecondary}" FontSize="12" Margin="0,0,0,14"/>
+
+                    <!-- Step Indicators -->
+                    <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="4" Margin="0,0,0,16">
+                        <UniformGrid Columns="4">
+                            <Border Background="{DynamicResource VisionCardBackground}" CornerRadius="4" Padding="6,4" Visibility="{Binding IsAiWizardStep1, Converter={StaticResource BooleanToVisibility}}">
+                                <TextBlock Text="1. Detectar" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource VisionAccent}"/>
+                            </Border>
+                            <TextBlock Text="1. Detectar" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource VisionTextSecondary}" Visibility="{Binding IsAiWizardStep1, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}"/>
+
+                            <Border Background="{DynamicResource VisionCardBackground}" CornerRadius="4" Padding="6,4" Visibility="{Binding IsAiWizardStep2, Converter={StaticResource BooleanToVisibility}}">
+                                <TextBlock Text="2. Parámetros" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource VisionAccent}"/>
+                            </Border>
+                            <TextBlock Text="2. Parámetros" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource VisionTextSecondary}" Visibility="{Binding IsAiWizardStep2, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}"/>
+
+                            <Border Background="{DynamicResource VisionCardBackground}" CornerRadius="4" Padding="6,4" Visibility="{Binding IsAiWizardStep3, Converter={StaticResource BooleanToVisibility}}">
+                                <TextBlock Text="3. Espacio" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource VisionAccent}"/>
+                            </Border>
+                            <TextBlock Text="3. Espacio" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource VisionTextSecondary}" Visibility="{Binding IsAiWizardStep3, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}"/>
+
+                            <Border Background="{DynamicResource VisionCardBackground}" CornerRadius="4" Padding="6,4" Visibility="{Binding IsAiWizardStep4, Converter={StaticResource BooleanToVisibility}}">
+                                <TextBlock Text="4. Resumen" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource VisionAccent}"/>
+                            </Border>
+                            <TextBlock Text="4. Resumen" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource VisionTextSecondary}" Visibility="{Binding IsAiWizardStep4, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}"/>
+                        </UniformGrid>
+                    </Border>
+
+                    <!-- STEP 1: ¿QUÉ QUIERES DETECTAR? -->
+                    <StackPanel Visibility="{Binding IsAiWizardStep1, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="¿Qué tipo de evento o actividad desea detectar?" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8"/>
+
+                        <!-- Category Selector -->
+                        <ComboBox ItemsSource="{Binding AiCategoryOptions}"
+                                  SelectedItem="{Binding SelectedAiCategory}"
+                                  Margin="0,0,0,10"/>
+
+                        <!-- List of definitions -->
+                        <ListBox ItemsSource="{Binding FilteredCatalog}"
+                                 SelectedItem="{Binding SelectedCatalogAnalytic}"
+                                 MaxHeight="220"
+                                 Background="{DynamicResource VisionSurface}"
+                                 BorderBrush="{DynamicResource VisionBorder}"
+                                 Margin="0,0,0,10"
+                                 Visibility="{Binding HasCatalogEntries, Converter={StaticResource BooleanToVisibility}}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="6,6" Margin="0,2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                                <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Background="{DynamicResource VisionCardBackground}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" CornerRadius="4" Padding="6,2" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                <TextBlock Text="{Binding Category}" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource VisionAccent}"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Empty Catalog State -->
+                        <Border Background="{DynamicResource VisionSurface}"
+                                BorderBrush="{DynamicResource VisionBorder}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="16"
+                                Margin="0,0,0,10"
+                                Visibility="{Binding HasNoCatalogEntries, Converter={StaticResource BooleanToVisibility}}">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="No se encontraron modelos IA disponibles en el catálogo."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource VisionTextSecondary}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,0,0,8"/>
+                                <Button Content="Recargar Catálogo"
+                                        Command="{Binding RefreshAnalyticsCommand}"
+                                        HorizontalAlignment="Center"
+                                        Padding="12,5"
+                                        FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- STEP 2: ¿CÓMO QUIERES QUE FUNCIONE? -->
+                    <StackPanel Visibility="{Binding IsAiWizardStep2, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="Ajuste los parámetros de precisión:" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="Nombre descriptivo de la instancia:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBox Text="{Binding AiCustomName, UpdateSourceTrigger=PropertyChanged}" Padding="6" Background="{DynamicResource VisionSurface}" Margin="0,3,0,10"/>
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Sensibilidad de detección:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding AiSensitivity, StringFormat='{}{0:P0}'}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource VisionAccent}" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <Slider Value="{Binding AiSensitivity}" Minimum="0.1" Maximum="1.0" SmallChange="0.05" LargeChange="0.1" Margin="0,0,0,10"/>
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Umbral de confianza mínimo:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding AiMinConfidence, StringFormat='{}{0:P0}'}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource VisionAccent}" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <Slider Value="{Binding AiMinConfidence}" Minimum="0.1" Maximum="1.0" SmallChange="0.05" LargeChange="0.1" Margin="0,0,0,10"/>
+                    </StackPanel>
+
+                    <!-- STEP 3: ¿DÓNDE APLICA? -->
+                    <StackPanel Visibility="{Binding IsAiWizardStep3, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="Definición de espacio de interés:" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
+
+                        <!-- Progressive Disclosure: Zone-based analytics -->
+                        <StackPanel Visibility="{Binding RequiresZone, Converter={StaticResource BooleanToVisibility}}">
+                            <TextBlock Text="Seleccione la zona poligonal delimitada:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding EditorZones}"
+                                      SelectedValue="{Binding SelectedTargetZoneName}"
+                                      SelectedValuePath="Name"
+                                      DisplayMemberPath="Name"
+                                      Margin="0,0,0,8"/>
+
+                            <!-- Contextual zone prompt if user wants to create one -->
+                            <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                                <StackPanel>
+                                    <TextBlock Text="¿Desea delimitar una nueva zona física en el video?" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <Button Content="+ Crear zona"
+                                            Command="{Binding StartContextualZoneCreationCommand}"
+                                            Padding="10,5"
+                                            FontSize="11"
+                                            HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Progressive Disclosure: Line-based analytics -->
+                        <StackPanel Visibility="{Binding RequiresLine, Converter={StaticResource BooleanToVisibility}}">
+                            <TextBlock Text="Seleccione la línea de cruce (tripwire):" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding EditorLines}"
+                                      SelectedValue="{Binding SelectedTargetLineId}"
+                                      SelectedValuePath="Id"
+                                      DisplayMemberPath="Name"
+                                      Margin="0,0,0,8"/>
+
+                            <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                                <StackPanel>
+                                    <TextBlock Text="¿Desea configurar una nueva línea virtual?" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <Button Content="+ Crear línea virtual"
+                                            Command="{Binding StartContextualLineCreationCommand}"
+                                            Padding="10,5"
+                                            FontSize="11"
+                                            HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Full frame notice when neither zone nor line required -->
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                            <TextBlock Text="Esta solución analiza toda la escena de la cámara (cuadro completo) sin requerir delimitaciones geométricas."
+                                       FontSize="11"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- STEP 4: EVIDENCIA Y RESUMEN -->
+                    <StackPanel Visibility="{Binding IsAiWizardStep4, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="Confirmación y registro de evidencia:" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,10"/>
+
+                        <CheckBox Content="Guardar captura fotográfica (snapshot) como evidencia al generar evento"
+                                  IsChecked="{Binding AiSaveEvidence}"
+                                  FontWeight="SemiBold"
+                                  Margin="0,0,0,12"/>
+
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="12" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="Resumen de configuración:" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                                <TextBlock Text="{Binding SelectedCatalogAnalytic.DisplayName, StringFormat='{}Modelo: {0}'}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding AiCustomName, StringFormat='{}Nombre: {0}'}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding AiSensitivity, StringFormat='{}Sensibilidad: {0:P0}'}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding SelectedTargetZoneName, StringFormat='{}Espacio: {0}', TargetNullValue='{}Espacio: Toda la escena'}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Error Banner inside Wizard -->
+                    <Border Background="#20F85149"
+                            BorderBrush="{DynamicResource VisionDanger}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,8"
+                            Margin="0,0,0,10"
+                            Visibility="{Binding HasAddAiError, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="{Binding AddAiError}"
+                                   Foreground="{DynamicResource VisionDanger}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+
+                    <!-- Wizard Buttons Navigation Bar -->
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Content="Cancelar" Command="{Binding CloseAddAiModalCommand}" Background="Transparent" BorderThickness="1" BorderBrush="{DynamicResource VisionBorder}" Padding="12,6"/>
+
+                        <Button Grid.Column="2" Content="← Anterior" Command="{Binding PrevAiWizardStepCommand}" Visibility="{Binding IsAiWizardStep1, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}" Background="{DynamicResource VisionSurface}" Padding="12,6"/>
+
+                        <Button Grid.Column="4" Content="Siguiente →" Command="{Binding NextAiWizardStepCommand}" Visibility="{Binding IsAiWizardStep4, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}" Padding="14,6" FontWeight="Bold"/>
+
+                        <Button Grid.Column="4" Content="Activar Solución IA" Command="{Binding ConfirmAddAiSolutionCommand}" Visibility="{Binding IsAiWizardStep4, Converter={StaticResource BooleanToVisibility}}" Padding="14,6" FontWeight="Bold"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
+

@@ -1,0 +1,204 @@
+<UserControl x:Class="HandRaise.Desktop.Views.DiagnosticsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,0,24" MaxWidth="720" HorizontalAlignment="Left">
+            <!-- Header -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Content="← Volver a Inicio"
+                        Command="{Binding NavigateCommand}"
+                        CommandParameter="0"
+                        Padding="12,6"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        VerticalAlignment="Center"
+                        Cursor="Hand"/>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <TextBlock Text="Diagnóstico del Sistema"
+                               FontSize="22"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource VisionTextPrimary}"/>
+                    <TextBlock Text="Telemetría de salud, memoria, procesos y estado de subsistemas"
+                               FontSize="12"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="3"
+                        Content="Actualizar Diagnóstico"
+                        Command="{Binding RefreshDiagnosticsCommand}"
+                        Padding="14,6"
+                        FontWeight="SemiBold"/>
+            </Grid>
+
+            <!-- Diagnostics Report Card -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18"
+                    Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="MÉTRICAS DE RENDIMIENTO"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"/>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="Tiempo Activo (Uptime):" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding UptimeText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="FPS Agregados:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding AggregateFps, StringFormat='{}{0:0.0} cuadros/segundo'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionSuccess}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="Estado de Capacidad:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding CapacityStateText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid>
+                        <TextBlock Text="Disponibilidad:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding ReadinessText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionAccent}" HorizontalAlignment="Right"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Camera Pipelines Performance Card -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18"
+                    Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="RENDIMIENTO DE PIPELINES POR CÁMARA"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"/>
+
+                    <ItemsControl ItemsSource="{Binding Cameras}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                            <TextBlock Text="{Binding CanonicalStateText}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Background="{DynamicResource VisionSurfaceElevated}" CornerRadius="4" Padding="8,4" Margin="0,0,6,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="Captura: " FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                    <TextBlock Text="{Binding FramesPerSecond, StringFormat='{}{0:0.0} FPS'}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource VisionSuccess}"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Background="{DynamicResource VisionSurfaceElevated}" CornerRadius="4" Padding="8,4" Margin="0,0,6,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="IA: " FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                    <TextBlock Text="{Binding InferenceFps, StringFormat='{}{0:0.0} FPS'}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource VisionAccent}"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Background="{DynamicResource VisionSurfaceElevated}" CornerRadius="4" Padding="8,4">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="Latencia IA: " FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                    <TextBlock Text="{Binding InferenceLatencyMs, StringFormat='{}{0:0.0} ms'}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Network and Host Info Card -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18">
+                <StackPanel>
+                    <TextBlock Text="SUBSISTEMA DE COMUNICACIÓN"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"/>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="Estado de la API:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding ApiStatusText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="Endpoint Activo:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding ActiveConnectionUrl}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid>
+                        <TextBlock Text="Cámaras Conectadas:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding ActiveCamerasCountText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Build and System Identity Card -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18"
+                    Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="INFORMACIÓN DE COMPILACIÓN Y SISTEMA"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"/>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="Aplicación:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding AppTitle}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="Subtítulo:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding AppSubtitle}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="Versión Comercial:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding AboutText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionAccent}" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Grid>
+                        <TextBlock Text="Build / Commit Hash:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                        <TextBlock Text="{Binding FullBuildVersionText}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="400"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
+

@@ -15,6 +15,39 @@ public static class DeviceSelector
             ?? throw new InvalidOperationException("El inventario no contiene ningún dispositivo.");
     }
 
+    public static DeviceSelection ResolveModeOrDevice(
+        IEnumerable<DeviceInfo> devices,
+        string? mode,
+        string? savedDeviceId)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        var candidates = devices.ToArray();
+        var cpu = candidates.FirstOrDefault(device => device.Backend == InferenceBackend.Cpu)
+            ?? throw new InvalidOperationException("El inventario debe incluir CPU.");
+
+        if (string.Equals(mode, "cpu", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DeviceSelection(cpu, false, null);
+        }
+
+        if (string.Equals(mode, "gpu", StringComparison.OrdinalIgnoreCase))
+        {
+            var bestGpu = candidates.Where(d => d.Backend != InferenceBackend.Cpu && d.RuntimeAvailable)
+                .OrderByDescending(Score)
+                .ThenByDescending(d => d.VramMb ?? 0)
+                .FirstOrDefault();
+
+            if (bestGpu is not null)
+            {
+                return new DeviceSelection(bestGpu, false, null);
+            }
+
+            return new DeviceSelection(cpu, true, "Modo GPU solicitado pero no hay acelerador DirectML disponible. Se usará CPU.");
+        }
+
+        return ResolveSavedDevice(candidates, savedDeviceId);
+    }
+
     public static DeviceSelection ResolveSavedDevice(
         IEnumerable<DeviceInfo> devices,
         string? savedDeviceId)

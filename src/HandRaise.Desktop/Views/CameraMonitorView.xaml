@@ -1,0 +1,267 @@
+<UserControl x:Class="HandRaise.Desktop.Views.CameraMonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="320"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: Video Player (16:9 uniform) -->
+        <Border Grid.Column="0"
+                Background="#0A0D10"
+                BorderBrush="{DynamicResource VisionBorder}"
+                BorderThickness="1"
+                CornerRadius="8"
+                ClipToBounds="True">
+            <Grid>
+                <!-- Video Image -->
+                <Image Source="{Binding VideoImage}" Stretch="Uniform"/>
+
+                <!-- Placeholder when no video image -->
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding IsStreaming, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}">
+                    <Border Width="48" Height="48" Background="#161B22" CornerRadius="24" HorizontalAlignment="Center" Margin="0,0,0,12">
+                        <Border Width="16" Height="16" Background="#556677" CornerRadius="8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="{Binding CanonicalStateText, StringFormat='{}Estado: {0}'}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="#8899A6"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding ContextualDiagnosticReason}"
+                               FontSize="12"
+                               Foreground="#556677"
+                               HorizontalAlignment="Center"
+                               TextWrapping="Wrap"
+                               MaxWidth="400"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <!-- Top Overlay Badge -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="12">
+                    <components:StatusBadge Text="{Binding CanonicalStateText}" Status="{Binding CanonicalStateText}"/>
+                </StackPanel>
+
+                <!-- Bottom Telemetry Bar -->
+                <Border VerticalAlignment="Bottom"
+                        Background="#CC0A0D10"
+                        Padding="12,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Resolución: " FontSize="11" Foreground="#A0AEC0"/>
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFF">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0} x {1}">
+                                        <Binding Path="FrameWidth"/>
+                                        <Binding Path="FrameHeight"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBlock Text="Rendimiento: " FontSize="11" Foreground="#A0AEC0"/>
+                            <TextBlock Text="{Binding FramesPerSecond, StringFormat='{}{0:0.0} FPS'}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#10B981"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                            <TextBlock Text="Soluciones IA: " FontSize="11" Foreground="#A0AEC0"/>
+                            <TextBlock Text="{Binding ActiveAnalyticsCount, StringFormat='{}{0} activas'}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#60A5FA"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Right: Telemetry & Status Panel -->
+        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <!-- First AI CTA (When no analytics active) -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionAccent}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14"
+                        Margin="0,0,0,12"
+                        Visibility="{Binding HasNoConfiguredAnalytics, Converter={StaticResource BooleanToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="ESCENA SIN ANALIZAR"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionAccent}"
+                                   Margin="0,0,0,4"/>
+                        <TextBlock Text="Esta cámara todavía no analiza la escena. Configure una solución para detectar eventos de IA."
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,10"/>
+                        <Button Content="+ Configurar Solución IA"
+                                Command="{Binding OpenAddAiModalCommand}"
+                                Padding="12,6"
+                                FontWeight="Bold"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Live Overlays Controls (When AI analytics configured) -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionBorder}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14"
+                        Margin="0,0,0,12"
+                        Visibility="{Binding HasConfiguredAnalytics, Converter={StaticResource BooleanToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="CAPAS VISUALES EN VIVO (OVERLAYS)"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,0,10"/>
+                        <CheckBox Content="Mostrar detecciones IA" IsChecked="{Binding ShowDetectionsOverlay}" Margin="0,0,0,6" FontSize="11"/>
+                        <CheckBox Content="Mostrar zonas delimitadas" IsChecked="{Binding ShowZonesOverlay}" Margin="0,0,0,6" FontSize="11"/>
+                        <CheckBox Content="Mostrar líneas virtuales" IsChecked="{Binding ShowLinesOverlay}" FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Telemetry Card -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionBorder}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14"
+                        Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="ESTADO OPERACIONAL"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,0,10"/>
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Identificador:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding Id}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Origen:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding SourceSummary}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Estado:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding Status}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Cuadros/Seg:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding FramesPerSecond, StringFormat='{}{0:0.0}'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionSuccess}" HorizontalAlignment="Right"/>
+                        </Grid>
+
+                        <Grid>
+                            <TextBlock Text="Plan de Inferencia:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}"/>
+                            <TextBlock Text="{Binding RuntimePlanSummary}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Quick Actions Card -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionBorder}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14"
+                        Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="ACCIONES RÁPIDAS"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,0,10"/>
+
+                        <Button Content="{Binding ActionButtonText}"
+                                Command="{Binding ToggleRunningCommand}"
+                                Margin="0,0,0,8"
+                                Padding="12,6"/>
+
+                        <Button Content="Configurar Analíticas IA"
+                                Command="{Binding SelectAnalyticsTabCommand}"
+                                Margin="0,0,0,8"
+                                Padding="12,6"/>
+
+                        <Button Content="Definir Espacios y Zonas"
+                                Command="{Binding SelectSpacesTabCommand}"
+                                Padding="12,6"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Recent Events Mini List -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionBorder}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14">
+                    <StackPanel>
+                        <TextBlock Text="ÚLTIMOS EVENTOS"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,10,0"/>
+
+                        <components:EmptyState Title="Sin eventos recientes"
+                                               Description="Los eventos generados por las analíticas activas aparecerán aquí."
+                                               Visibility="{Binding HasNoEvents, Converter={StaticResource BooleanToVisibility}}"
+                                               Margin="0,8,0,0"/>
+
+                        <ItemsControl ItemsSource="{Binding RecentEvents}"
+                                      Visibility="{Binding HasEvents, Converter={StaticResource BooleanToVisibility}}"
+                                      Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource VisionBorder}"
+                                            BorderThickness="0,0,0,1"
+                                            Padding="0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding AnalyticTitle}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                                <TextBlock Text="{Binding TimestampText}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding ConfidenceText}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionAccent}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
+

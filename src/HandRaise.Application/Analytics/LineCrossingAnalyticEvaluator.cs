@@ -13,6 +13,7 @@ public sealed class LineCrossingAnalyticEvaluator : IAnalyticEvaluator
 
     public string AnalyticTypeId => "line_crossing";
     public string InstanceId => _instanceId;
+    public bool IsEnabled { get; set; } = true;
 
     public LineCrossingAnalyticEvaluator(
         string? instanceId = null,
@@ -30,7 +31,7 @@ public sealed class LineCrossingAnalyticEvaluator : IAnalyticEvaluator
 
     public AnalyticEvaluationResult Evaluate(AnalyticFrameContext context)
     {
-        if (context.TrackingUpdate.People.Count == 0 || context.Lines.Count == 0)
+        if (!IsEnabled || context.TrackingUpdate.People.Count == 0 || context.Lines.Count == 0)
         {
             return AnalyticEvaluationResult.Empty;
         }

@@ -1,5 +1,7 @@
 using System.Windows.Threading;
 using HandRaise.Application.Analytics;
+using HandRaise.Application.Events;
+using HandRaise.Application.Rules;
 using HandRaise.Desktop.Configuration;
 using HandRaise.Desktop.Services;
 using HandRaise.Desktop.ViewModels;
@@ -32,7 +34,7 @@ public sealed class DesktopViewModelsTests
         var vm = new MainViewModel(config, controller, dispatcher, _ => { });
 
         Assert.Equal("VisionControl Edge", vm.AppTitle);
-        Assert.Equal("Nodo de Visión Artificial", vm.AppSubtitle);
+        Assert.Equal("Sistema de Visión Artificial", vm.AppSubtitle);
         Assert.True(vm.IsOverviewSelected);
         Assert.False(vm.IsCamerasSelected);
         Assert.False(vm.IsAlertsSelected);
@@ -60,15 +62,27 @@ public sealed class DesktopViewModelsTests
 
         vm.SelectedNavIndex = 4;
         Assert.True(vm.IsModelsSelected);
+        Assert.True(vm.IsSettingsOrTechnicalSelected);
+        Assert.Equal(3, vm.SettingsTabIndex);
 
         vm.SelectedNavIndex = 5;
         Assert.True(vm.IsSystemSelected);
+        Assert.True(vm.IsSettingsOrTechnicalSelected);
+        Assert.Equal(0, vm.SettingsTabIndex);
 
         vm.SelectedNavIndex = 6;
         Assert.True(vm.IsWebConnectionSelected);
+        Assert.True(vm.IsSettingsOrTechnicalSelected);
+        Assert.Equal(2, vm.SettingsTabIndex);
+
+        vm.SelectedNavIndex = 9;
+        Assert.True(vm.IsPerformanceSettingsSelected);
+        Assert.True(vm.IsSettingsOrTechnicalSelected);
+        Assert.Equal(1, vm.SettingsTabIndex);
 
         vm.SelectedNavIndex = 7;
         Assert.True(vm.IsDiagnosticsSelected);
+        Assert.False(vm.IsSettingsOrTechnicalSelected);
 
         vm.BackToCamerasCommand.Execute(null);
         Assert.True(vm.IsCamerasSelected);
@@ -213,7 +227,11 @@ public sealed class DesktopViewModelsTests
         var dispatcher = Dispatcher.CurrentDispatcher;
 
         var vm = new MainViewModel(config, controller, dispatcher, _ => { });
+        Assert.True(vm.IsLoadingInitialState);
+        Assert.False(vm.HasNoCameras);
+        vm.MarkInitialSyncComplete();
 
+        Assert.False(vm.IsLoadingInitialState);
         Assert.True(vm.HasNoCameras);
         Assert.False(vm.HasCameras);
 
@@ -360,7 +378,7 @@ public sealed class DesktopViewModelsTests
     }
 
     [Fact]
-    public async Task MainViewModel_AddCameraWizard_EnumeratesUsbDevicesAndSelectsDefault()
+    public async Task MainViewModel_AddCameraWizard_EnumeratesUsbDevicesWithoutAutoSelecting()
     {
         var config = CreateTestConfig();
         var controller = new NodeHostController();
@@ -377,6 +395,11 @@ public sealed class DesktopViewModelsTests
 
         Assert.True(vm.IsAddCameraModalOpen);
         Assert.Equal(2, vm.DetectedUsbDevices.Count);
+        Assert.Null(vm.SelectedUsbDevice);
+        Assert.True(string.IsNullOrEmpty(vm.WizardUsbIndex));
+
+        // Conscious user selection
+        vm.SelectedUsbDevice = vm.DetectedUsbDevices[0];
         Assert.NotNull(vm.SelectedUsbDevice);
         Assert.Equal("Logitech C920 HD Pro", vm.SelectedUsbDevice.Name);
         Assert.Equal("0", vm.WizardUsbIndex);
@@ -497,6 +520,647 @@ public sealed class DesktopViewModelsTests
         Assert.True(vm.IsMonitorTabSelected);
     }
 
+    [Fact]
+    public void MainViewModel_InitializesWithZeroCamerasAndCleanVersion()
+    {
+        var config = CreateTestConfig();
+        var controller = new NodeHostController();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        var vm = new MainViewModel(config, controller, dispatcher, _ => { });
+        vm.MarkInitialSyncComplete();
+
+        Assert.True(vm.HasNoCameras);
+        Assert.False(vm.HasCameras);
+        Assert.Equal(0, vm.TotalCamerasCount);
+        Assert.Equal("VisionControl Edge · v0.9.0", vm.AboutText);
+        Assert.Equal("Sistema de Visión Artificial", vm.AppSubtitle);
+    }
+
+    [Fact]
+    public void MainViewModel_CategoryNavigation_WithZeroCameras_NavigatesToCamerasWithHint()
+    {
+        var config = CreateTestConfig();
+        var controller = new NodeHostController();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        var vm = new MainViewModel(config, controller, dispatcher, _ => { });
+
+        vm.NavigateToAnalyticsCommand.Execute(null);
+        Assert.True(vm.IsCamerasSelected);
+        Assert.Contains("Agregue una cámara", vm.StatusMessage);
+
+        vm.NavigateToRulesCommand.Execute(null);
+        Assert.True(vm.IsCamerasSelected);
+        Assert.Contains("Agregue una cámara", vm.StatusMessage);
+
+        vm.NavigateToEventsCommand.Execute(null);
+        Assert.True(vm.IsCamerasSelected);
+        Assert.Contains("Agregue una cámara", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void MainViewModel_OpenAddCameraWizard_DoesNotAutoSelectUsbIndexZero()
+    {
+        var config = CreateTestConfig();
+        var controller = new NodeHostController();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        var vm = new MainViewModel(config, controller, dispatcher, _ => { });
+
+        vm.ShowAddCameraModalCommand.Execute(null);
+
+        Assert.True(vm.IsAddCameraModalOpen);
+        Assert.Null(vm.SelectedUsbDevice);
+        Assert.True(string.IsNullOrEmpty(vm.WizardUsbIndex));
+    }
+
+    [Fact]
+    public void MainViewModel_PostSaveBanner_CanBeDismissed()
+    {
+        var config = CreateTestConfig();
+        var controller = new NodeHostController();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        var vm = new MainViewModel(config, controller, dispatcher, _ => { });
+
+        vm.ShowPostSaveBanner = true;
+        Assert.True(vm.ShowPostSaveBanner);
+
+        vm.DismissPostSaveBannerCommand.Execute(null);
+        Assert.False(vm.ShowPostSaveBanner);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_VirginCamera_DefaultsToZeroAnalyticsAndNoInferenceSummary()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-virgin", "Cámara Limpia", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher,
+            analyticService: analyticService);
+
+        await vm.LoadAssignedAnalyticsAsync();
+
+        Assert.True(vm.HasNoConfiguredAnalytics);
+        Assert.False(vm.HasConfiguredAnalytics);
+        Assert.Empty(vm.AssignedAnalytics);
+        Assert.Equal(0, vm.ActiveAnalyticsCount);
+        Assert.True(vm.IsNormalMode);
+        Assert.False(vm.IsCreatingGeometryForAi);
+        Assert.True(vm.OpenAddAiModalCommand.CanExecute(null));
+        Assert.True(vm.StartDirectZoneCreationCommand.CanExecute(null));
+        Assert.True(vm.StartDirectLineCreationCommand.CanExecute(null));
+        Assert.True(vm.SaveConfigCommand.CanExecute(null));
+        Assert.Contains("Sin análisis activo", vm.ActivitySummaryText);
+        Assert.Equal("⚪ Sin análisis activo", vm.OperationalResultsSummary);
+    }
+
+    [Fact]
+    public void BooleanToVisibilityConverter_SupportsInverseParameter()
+    {
+        var conv = new HandRaise.Desktop.Converters.BooleanToVisibilityConverter();
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+
+        Assert.Equal(System.Windows.Visibility.Visible, conv.Convert(true, typeof(System.Windows.Visibility), null, culture));
+        Assert.Equal(System.Windows.Visibility.Collapsed, conv.Convert(false, typeof(System.Windows.Visibility), null, culture));
+        Assert.Equal(System.Windows.Visibility.Visible, conv.Convert(false, typeof(System.Windows.Visibility), "inverse", culture));
+        Assert.Equal(System.Windows.Visibility.Collapsed, conv.Convert(true, typeof(System.Windows.Visibility), "inverse", culture));
+    }
+
+    [Fact]
+    public void CameraViewModel_DirectGeometryCreation_ManagesDrawingModesAndReturnsToNormal()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-geom", "Cámara Zonas", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher);
+
+        Assert.True(vm.IsNormalMode);
+        Assert.False(vm.IsCreatingGeometryForAi);
+        Assert.False(vm.IsCreatingContextualZone);
+        Assert.False(vm.IsCreatingContextualLine);
+
+        // Direct Zone creation
+        vm.StartDirectZoneCreationCommand.Execute(null);
+        Assert.True(vm.IsCreatingContextualZone);
+        Assert.True(vm.IsCreatingGeometryForAi);
+        Assert.False(vm.IsNormalMode);
+        Assert.False(vm.IsCreatingContextualLine);
+
+        vm.CancelContextualGeometryAndReturnCommand.Execute(null);
+        Assert.False(vm.IsCreatingContextualZone);
+        Assert.False(vm.IsCreatingGeometryForAi);
+        Assert.True(vm.IsNormalMode);
+
+        // Direct Line creation
+        vm.StartDirectLineCreationCommand.Execute(null);
+        Assert.True(vm.IsCreatingContextualLine);
+        Assert.True(vm.IsCreatingGeometryForAi);
+        Assert.False(vm.IsNormalMode);
+        Assert.False(vm.IsCreatingContextualZone);
+
+        vm.CancelContextualGeometryAndReturnCommand.Execute(null);
+        Assert.False(vm.IsCreatingContextualLine);
+        Assert.False(vm.IsCreatingGeometryForAi);
+        Assert.True(vm.IsNormalMode);
+    }
+
+    [Fact]
+    public void CameraViewModel_SelectCatalogAnalyticAndNextCommand_AdvancesToStep2()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+        var catalogDef = new AnalyticDefinition(
+            Id: "person_detect",
+            DisplayName: "Detección de Personas",
+            Description: "Detecta siluetas humanas",
+            Category: AnalyticCategory.Security,
+            Version: "1.0.0",
+            RequiredCapabilities: [InferenceCapability.PoseEstimation],
+            Features: [AnalyticFeature.Zones],
+            ProducedEventTypes: ["person_detected"],
+            Parameters: []);
+        var catalog = new StubAnalyticCatalog([catalogDef]);
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-cat", "Cámara Catálogo", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher,
+            analyticCatalog: catalog);
+
+        vm.OpenAddAiModalCommand.Execute(null);
+        Assert.True(vm.IsAddAiModalOpen);
+        Assert.True(vm.IsAiWizardStep1);
+
+        // Can select with string ID
+        vm.SelectCatalogAnalyticAndNextCommand.Execute("person_detect");
+
+        Assert.NotNull(vm.SelectedCatalogAnalytic);
+        Assert.Equal("person_detect", vm.SelectedCatalogAnalytic.Id);
+        Assert.True(vm.IsAiWizardStep2);
+        Assert.Equal(2, vm.AiWizardStep);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_AddMultipleAnalytics_UpdatesOperationalSummaryCorrectly()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var def1 = new AnalyticDefinition("person_detect", "Personas", "Desc", AnalyticCategory.Security, "1.0", [InferenceCapability.PoseEstimation], [], [], []);
+        var def2 = new AnalyticDefinition("hand_raise", "Manos", "Desc", AnalyticCategory.General, "1.0", [InferenceCapability.PoseEstimation], [], [], []);
+        var catalog = new StubAnalyticCatalog([def1, def2]);
+
+        await analyticService.CreateAsync("cam-multi", new CameraAnalyticWriteRequest(AnalyticTypeId: "person_detect", Name: "Personas Entrada", Enabled: true));
+        await analyticService.CreateAsync("cam-multi", new CameraAnalyticWriteRequest(AnalyticTypeId: "hand_raise", Name: "Manos Fila", Enabled: true));
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-multi", "Cámara Multi", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog);
+
+        await vm.LoadAssignedAnalyticsAsync();
+
+        Assert.True(vm.HasConfiguredAnalytics);
+        Assert.False(vm.HasNoConfiguredAnalytics);
+        Assert.Equal(2, vm.AssignedAnalytics.Count);
+        Assert.Equal(2, vm.ActiveAnalyticsCount);
+        Assert.Contains("2 soluciones IA en ejecución", vm.ActivitySummaryText);
+        Assert.Equal("🟢 2 soluciones activas", vm.OperationalResultsSummary);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_AddHandRaise_UsesDataDrivenParameters_WithoutSensitivity_AndNoZoneByDefault()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var catalog = new StandardAnalyticCatalog();
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-hr", "Cámara HR", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog);
+
+        vm.OpenAddAiModalCommand.Execute(null);
+        vm.SelectCatalogAnalyticAndNextCommand.Execute("hand_raise");
+
+        Assert.NotNull(vm.SelectedCatalogAnalytic);
+        Assert.Equal("hand_raise", vm.SelectedCatalogAnalytic.Id);
+        Assert.False(vm.RequiresZone);
+        Assert.True(vm.AllowsOptionalZone);
+        Assert.True(vm.IsFullImageAnalysis);
+        Assert.False(vm.IsSpecificAreaAnalysis);
+
+        // Verify dynamic parameters loaded from catalog definition
+        Assert.Equal(3, vm.DynamicParameters.Count);
+        Assert.Contains(vm.DynamicParameters, p => p.Key == "strict_mode" && p.IsBoolean);
+        Assert.Contains(vm.DynamicParameters, p => p.Key == "consecutive_frames" && p.IsNumber);
+        Assert.Contains(vm.DynamicParameters, p => p.Key == "cooldown_ms" && p.IsNumber);
+        Assert.DoesNotContain(vm.DynamicParameters, p => p.Key == "sensitivity");
+
+        await vm.ConfirmAddAiSolutionCommand.ExecuteAsync(null);
+
+        Assert.False(vm.IsAddAiModalOpen);
+        Assert.Null(vm.AddAiError);
+        Assert.True(vm.AiSuccessBannerVisible);
+
+        var instances = await analyticService.ListByCameraAsync("cam-hr");
+        Assert.NotNull(instances);
+        var created = Assert.Single(instances);
+        Assert.Equal("hand_raise", created.AnalyticTypeId);
+        Assert.Null(created.AssignedZoneIds);
+        Assert.NotNull(created.Configuration);
+        Assert.False(created.Configuration.ContainsKey("sensitivity"));
+        Assert.True(created.Configuration.ContainsKey("strict_mode"));
+        Assert.True(created.Configuration.ContainsKey("consecutive_frames"));
+        Assert.True(created.Configuration.ContainsKey("cooldown_ms"));
+    }
+
+    [Fact]
+    public void CameraViewModel_RectangleDrawing_ProducesFourClockwiseVertices()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-rect", "Cámara Rect", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher);
+
+        vm.StartDirectRectangleCreationCommand.Execute(null);
+
+        Assert.True(vm.IsEditingZones);
+        Assert.True(vm.IsDrawingRectangle);
+        Assert.Empty(vm.DraftPoints);
+
+        // First click (corner 1)
+        vm.AddZonePoint(new HandRaise.Application.Zones.NormalizedPoint(0.2, 0.3));
+        Assert.Single(vm.DraftPoints);
+
+        // Second click (opposite corner 2)
+        vm.AddZonePoint(new HandRaise.Application.Zones.NormalizedPoint(0.8, 0.7));
+        Assert.Equal(4, vm.DraftPoints.Count);
+
+        // Check clockwise normalized vertices: (minX, minY), (maxX, minY), (maxX, maxY), (minX, maxY)
+        Assert.Equal(0.2, vm.DraftPoints[0].X, 3);
+        Assert.Equal(0.3, vm.DraftPoints[0].Y, 3);
+        Assert.Equal(0.8, vm.DraftPoints[1].X, 3);
+        Assert.Equal(0.3, vm.DraftPoints[1].Y, 3);
+        Assert.Equal(0.8, vm.DraftPoints[2].X, 3);
+        Assert.Equal(0.7, vm.DraftPoints[2].Y, 3);
+        Assert.Equal(0.2, vm.DraftPoints[3].X, 3);
+        Assert.Equal(0.7, vm.DraftPoints[3].Y, 3);
+    }
+
+    [Fact]
+    public void CameraViewModel_ZoneAndLineRequirements_StrictlyFollowAnalyticTypes()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+        var catalog = new StandardAnalyticCatalog();
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-reqs", "Cámara Reqs", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher,
+            analyticCatalog: catalog);
+
+        // Zone Intrusion: zone required
+        vm.SelectedCatalogAnalytic = catalog.GetById("zone_intrusion");
+        Assert.True(vm.RequiresZone);
+        Assert.False(vm.AllowsOptionalZone);
+        Assert.False(vm.RequiresLine);
+        Assert.True(vm.IsSpecificAreaAnalysis);
+        Assert.False(vm.IsFullImageAnalysis);
+
+        // Hand Raise: zone optional
+        vm.SelectedCatalogAnalytic = catalog.GetById("hand_raise");
+        Assert.False(vm.RequiresZone);
+        Assert.True(vm.AllowsOptionalZone);
+        Assert.False(vm.RequiresLine);
+        Assert.True(vm.IsFullImageAnalysis);
+        Assert.False(vm.IsSpecificAreaAnalysis);
+
+        // Line Crossing: line required
+        vm.SelectedCatalogAnalytic = catalog.GetById("line_crossing");
+        Assert.False(vm.RequiresZone);
+        Assert.False(vm.AllowsOptionalZone);
+        Assert.True(vm.RequiresLine);
+
+        // Person Counting: line required
+        vm.SelectedCatalogAnalytic = catalog.GetById("person_counting");
+        Assert.False(vm.RequiresZone);
+        Assert.False(vm.AllowsOptionalZone);
+    }
+
+    [Fact]
+    public void CameraViewModel_RulesModal_WhenNoAnalytics_DoesNotOpen()
+    {
+        var camera = new CameraView("cam-1", "Front Cam", "0", true, true, true, 30.0, null);
+        var cameraService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var catalog = new StandardAnalyticCatalog();
+        var ruleStore = new StubRuleStore();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        var vm = new CameraViewModel(
+            camera,
+            cameraService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog,
+            ruleStore: ruleStore);
+
+        Assert.True(vm.HasNoConfiguredAnalytics);
+        vm.OpenRulesModalCommand.Execute(null);
+        Assert.False(vm.IsRulesModalOpen);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_RulesModal_OpensWithPreselectedAnalytic_AndDataDrivenEventTypes()
+    {
+        var camera = new CameraView("cam-1", "Front Cam", "0", true, true, true, 30.0, null);
+        var cameraService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var catalog = new StandardAnalyticCatalog();
+        var ruleStore = new StubRuleStore();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        await analyticService.CreateAsync("cam-1", new CameraAnalyticWriteRequest(
+            Id: "inst-hr",
+            AnalyticTypeId: "hand_raise",
+            Name: "Mano Levantada",
+            Enabled: true));
+
+        var vm = new CameraViewModel(
+            camera,
+            cameraService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog,
+            ruleStore: ruleStore);
+
+        await vm.LoadAssignedAnalyticsAsync();
+        Assert.True(vm.HasConfiguredAnalytics);
+        Assert.True(vm.HasSingleAssignedAnalytic);
+        Assert.False(vm.HasMultipleAssignedAnalytics);
+
+        vm.OpenRulesModalCommand.Execute(null);
+        Assert.True(vm.IsRulesModalOpen);
+        Assert.NotNull(vm.SelectedRuleAnalytic);
+        Assert.Equal("inst-hr", vm.SelectedRuleAnalytic.InstanceId);
+        Assert.Equal(["hand_raised", "hand_lowered"], vm.AvailableRuleEventTypes);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_RulesModal_CreateAndSaveRule_PersistsToRuleStoreWithCorrectProperties()
+    {
+        var camera = new CameraView("cam-1", "Front Cam", "0", true, true, true, 30.0, null);
+        var cameraService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var catalog = new StandardAnalyticCatalog();
+        var ruleStore = new StubRuleStore();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        await analyticService.CreateAsync("cam-1", new CameraAnalyticWriteRequest(
+            Id: "inst-hr",
+            AnalyticTypeId: "hand_raise",
+            Name: "Mano Levantada",
+            Enabled: true));
+
+        var vm = new CameraViewModel(
+            camera,
+            cameraService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog,
+            ruleStore: ruleStore);
+
+        await vm.LoadAssignedAnalyticsAsync();
+        vm.OpenRulesModalCommand.Execute(null);
+
+        vm.StartCreateRuleCommand.Execute(null);
+        Assert.True(vm.IsEditingRule);
+        Assert.Equal("Nueva Regla de Alerta", vm.RuleFormTitle);
+
+        vm.RuleEditName = "Alerta Mano Crítica";
+        vm.RuleEditEventType = "hand_raised";
+        vm.RuleEditSeverity = "Crítica";
+        vm.RuleEditCooldownSeconds = 10;
+        vm.RuleEditEnabled = true;
+
+        await vm.SaveRuleCommand.ExecuteAsync(null);
+        Assert.False(vm.IsEditingRule);
+        Assert.Null(vm.RuleErrorMessage);
+
+        // Verify in RuleStore
+        var storedRules = await ruleStore.ListByInstanceAsync("cam-1", "inst-hr");
+        Assert.Single(storedRules);
+        var r = storedRules[0];
+        Assert.Equal("Alerta Mano Crítica", r.Name);
+        Assert.Equal("inst-hr", r.AnalyticInstanceId);
+        Assert.Equal("cam-1", r.CameraId);
+        Assert.Equal(AlertSeverity.Critical, r.Severity);
+        Assert.Equal(10000, r.CooldownMs);
+        Assert.Equal(["hand_raised"], r.EventTypes);
+        Assert.True(r.Enabled);
+
+        // Verify in ViewModel list
+        Assert.Single(vm.CameraRules);
+        Assert.Equal("Alerta Mano Crítica", vm.CameraRules[0].Name);
+        Assert.Equal("Crítica", vm.CameraRules[0].SeverityText);
+        Assert.Equal(10, vm.CameraRules[0].CooldownSeconds);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_RulesModal_EditRule_UpdatesFieldsAndSaves()
+    {
+        var camera = new CameraView("cam-1", "Front Cam", "0", true, true, true, 30.0, null);
+        var cameraService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var catalog = new StandardAnalyticCatalog();
+        var ruleStore = new StubRuleStore();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        await analyticService.CreateAsync("cam-1", new CameraAnalyticWriteRequest(
+            Id: "inst-hr",
+            AnalyticTypeId: "hand_raise",
+            Name: "Mano Levantada",
+            Enabled: true));
+
+        await ruleStore.SaveAsync(new AlertRule(
+            Id: "rule-1",
+            CameraId: "cam-1",
+            AnalyticInstanceId: "inst-hr",
+            Name: "Regla Original",
+            Enabled: true,
+            EventTypes: ["hand_raised"],
+            Severity: AlertSeverity.Medium,
+            CooldownMs: 5000));
+
+        var vm = new CameraViewModel(
+            camera,
+            cameraService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog,
+            ruleStore: ruleStore);
+
+        await vm.LoadAssignedAnalyticsAsync();
+        vm.OpenRulesModalCommand.Execute(null);
+        await vm.LoadRulesForSelectedAnalyticAsync();
+
+        Assert.Single(vm.CameraRules);
+        var item = vm.CameraRules[0];
+
+        vm.StartEditRuleCommand.Execute(item);
+        Assert.True(vm.IsEditingRule);
+        Assert.Equal("Editar Regla de Alerta", vm.RuleFormTitle);
+        Assert.Equal("Regla Original", vm.RuleEditName);
+
+        vm.RuleEditName = "Regla Modificada";
+        vm.RuleEditEventType = "hand_lowered";
+        vm.RuleEditSeverity = "Baja";
+        vm.RuleEditCooldownSeconds = 20;
+
+        await vm.SaveRuleCommand.ExecuteAsync(null);
+        Assert.False(vm.IsEditingRule);
+
+        var updated = await ruleStore.GetByIdAsync("cam-1", "inst-hr", "rule-1");
+        Assert.NotNull(updated);
+        Assert.Equal("Regla Modificada", updated.Name);
+        Assert.Equal(["hand_lowered"], updated.EventTypes);
+        Assert.Equal(AlertSeverity.Low, updated.Severity);
+        Assert.Equal(20000, updated.CooldownMs);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_RulesModal_DeleteRule_RemovesFromRuleStore()
+    {
+        var camera = new CameraView("cam-1", "Front Cam", "0", true, true, true, 30.0, null);
+        var cameraService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var catalog = new StandardAnalyticCatalog();
+        var ruleStore = new StubRuleStore();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        await analyticService.CreateAsync("cam-1", new CameraAnalyticWriteRequest(
+            Id: "inst-hr",
+            AnalyticTypeId: "hand_raise",
+            Name: "Mano Levantada",
+            Enabled: true));
+
+        await ruleStore.SaveAsync(new AlertRule(
+            Id: "rule-1",
+            CameraId: "cam-1",
+            AnalyticInstanceId: "inst-hr",
+            Name: "Regla a Eliminar",
+            Enabled: true,
+            EventTypes: ["hand_raised"],
+            Severity: AlertSeverity.High,
+            CooldownMs: 3000));
+
+        var vm = new CameraViewModel(
+            camera,
+            cameraService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog,
+            ruleStore: ruleStore);
+
+        await vm.LoadAssignedAnalyticsAsync();
+        vm.OpenRulesModalCommand.Execute(null);
+        await vm.LoadRulesForSelectedAnalyticAsync();
+
+        Assert.Single(vm.CameraRules);
+        var item = vm.CameraRules[0];
+
+        await vm.DeleteRuleCommand.ExecuteAsync(item);
+
+        Assert.Empty(vm.CameraRules);
+        var stored = await ruleStore.ListByInstanceAsync("cam-1", "inst-hr");
+        Assert.Empty(stored);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_RulesModal_MultipleAnalytics_SwitchingAnalyticUpdatesRulesAndEventTypes()
+    {
+        var camera = new CameraView("cam-1", "Front Cam", "0", true, true, true, 30.0, null);
+        var cameraService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var catalog = new StandardAnalyticCatalog();
+        var ruleStore = new StubRuleStore();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+
+        await analyticService.CreateAsync("cam-1", new CameraAnalyticWriteRequest(
+            Id: "inst-hr",
+            AnalyticTypeId: "hand_raise",
+            Name: "Mano Levantada",
+            Enabled: true));
+
+        await analyticService.CreateAsync("cam-1", new CameraAnalyticWriteRequest(
+            Id: "inst-zi",
+            AnalyticTypeId: "zone_intrusion",
+            Name: "Intrusión en Zona",
+            Enabled: true));
+
+        await ruleStore.SaveAsync(new AlertRule(
+            Id: "rule-hr",
+            CameraId: "cam-1",
+            AnalyticInstanceId: "inst-hr",
+            Name: "Regla Mano",
+            EventTypes: ["hand_raised"]));
+
+        await ruleStore.SaveAsync(new AlertRule(
+            Id: "rule-zi",
+            CameraId: "cam-1",
+            AnalyticInstanceId: "inst-zi",
+            Name: "Regla Intrusión",
+            EventTypes: ["zone_intrusion_started"]));
+
+        var vm = new CameraViewModel(
+            camera,
+            cameraService,
+            dispatcher,
+            analyticService: analyticService,
+            analyticCatalog: catalog,
+            ruleStore: ruleStore);
+
+        await vm.LoadAssignedAnalyticsAsync();
+        Assert.True(vm.HasMultipleAssignedAnalytics);
+        Assert.Equal(2, vm.AssignedAnalytics.Count);
+
+        vm.OpenRulesModalCommand.Execute(null);
+
+        // Preselected is first analytic (inst-hr)
+        Assert.Equal("inst-hr", vm.SelectedRuleAnalytic!.InstanceId);
+        Assert.Equal(["hand_raised", "hand_lowered"], vm.AvailableRuleEventTypes);
+        Assert.Single(vm.CameraRules);
+        Assert.Equal("Regla Mano", vm.CameraRules[0].Name);
+
+        // Switch to second analytic (inst-zi)
+        var secondAnalytic = vm.AssignedAnalytics.First(a => a.InstanceId == "inst-zi");
+        vm.SelectedRuleAnalytic = secondAnalytic;
+        await vm.LoadRulesForSelectedAnalyticAsync();
+
+        Assert.Equal(["zone_intrusion_started", "zone_intrusion_ended"], vm.AvailableRuleEventTypes);
+        Assert.Single(vm.CameraRules);
+        Assert.Equal("Regla Intrusión", vm.CameraRules[0].Name);
+    }
+
     private static void RunInSta(Action action)
     {
         Exception? exception = null;
@@ -584,6 +1248,171 @@ public sealed class DesktopViewModelsTests
         }
     }
 
+    [Fact]
+    public async Task MainViewModel_MetricsNavigation_OpensOverviewAndDetailCleanly()
+    {
+        var config = CreateTestConfig();
+        var controller = new NodeHostController();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var vm = new MainViewModel(config, controller, dispatcher, _ => { });
+
+        vm.SelectedNavIndex = 2;
+        Assert.True(vm.IsMetricsSelected);
+        Assert.True(vm.IsMetricsOverviewOpen);
+        Assert.False(vm.IsMetricsDetailOpen);
+        Assert.Null(vm.SelectedMetricsCamera);
+
+        var cameraView = new CameraView("cam-1", "Cámara Principal", "0", true, true, true, 30.0, null);
+        var camVm = new CameraViewModel(cameraView, new StubCameraManagementService(), dispatcher);
+        vm.Cameras.Add(camVm);
+
+        await vm.OpenCameraMetricsCommand.ExecuteAsync(camVm);
+        Assert.True(vm.IsMetricsSelected);
+        Assert.True(vm.IsMetricsDetailOpen);
+        Assert.False(vm.IsMetricsOverviewOpen);
+        Assert.Same(camVm, vm.SelectedMetricsCamera);
+
+        await vm.BackToMetricsOverviewCommand.ExecuteAsync(null);
+        Assert.True(vm.IsMetricsSelected);
+        Assert.True(vm.IsMetricsOverviewOpen);
+        Assert.False(vm.IsMetricsDetailOpen);
+        Assert.Null(vm.SelectedMetricsCamera);
+    }
+
+    [Fact]
+    public void EventItemViewModel_FriendlySpanishClassification_MapsCorrectly()
+    {
+        var ev = new HandEvent(
+            Id: "ev-1",
+            Type: "hand_raised",
+            CameraId: "cam-1",
+            TrackId: 42,
+            Hand: "Right",
+            Zone: "Zona Frente",
+            Confidence: 0.88,
+            Timestamp: DateTimeOffset.UtcNow);
+
+        var vm = EventItemViewModel.Create(ev, "data/snapshots");
+
+        Assert.Equal("Mano levantada detectada", vm.Title);
+        Assert.Equal("hand_raised", vm.RawEventType);
+        Assert.Equal("Zona Frente", vm.ZoneName);
+        Assert.Contains("Zona Frente", vm.Description);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_UX10_5_ConfiguredRules_PopulatedAndEditableFromWorkspace()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+        var ruleStore = new StubRuleStore();
+
+        var analytic = await analyticService.CreateAsync("cam-1", new CameraAnalyticWriteRequest(
+            Id: "inst-1",
+            AnalyticTypeId: "hand_raise",
+            Name: "Mano Levantada",
+            Enabled: true,
+            Configuration: new Dictionary<string, object?>()));
+
+        await ruleStore.SaveAsync(new AlertRule(
+            Id: "rule-1",
+            CameraId: "cam-1",
+            AnalyticInstanceId: "inst-1",
+            Name: "Alerta Mano Arriba",
+            Enabled: true,
+            EventTypes: ["hand_raised"],
+            Conditions: null,
+            Severity: AlertSeverity.High,
+            TitleTemplate: "{event_type}",
+            DescriptionTemplate: "{camera_name}",
+            CooldownMs: 5000,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow));
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-1", "Cámara 1", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher,
+            analyticService: analyticService,
+            ruleStore: ruleStore);
+
+        await vm.LoadAssignedAnalyticsAsync();
+        await vm.LoadConfiguredRulesAsync();
+
+        Assert.True(vm.HasConfiguredRules);
+        Assert.False(vm.HasNoConfiguredRules);
+        Assert.Single(vm.ConfiguredRules);
+        var item = vm.ConfiguredRules[0];
+        Assert.Equal("Alerta Mano Arriba", item.Name);
+        Assert.Equal("Alta", item.SeverityText);
+        Assert.Equal("Mano levantada", item.EventTypesText);
+        Assert.Equal("Activa", item.StatusText);
+        Assert.Equal("5 seg", item.CooldownText);
+
+        // Test editing from workspace opens modal
+        vm.StartEditRuleFromWorkspaceCommand.Execute(item);
+        Assert.True(vm.IsRulesModalOpen);
+        Assert.True(vm.IsEditingRule);
+        Assert.Equal("rule-1", vm.RuleEditId);
+        Assert.Equal("Alerta Mano Arriba", vm.RuleEditName);
+
+        // Test creating rule from workspace opens modal
+        vm.CloseRulesModalCommand.Execute(null);
+        Assert.False(vm.IsRulesModalOpen);
+        vm.StartCreateRuleFromWorkspaceCommand.Execute(null);
+        Assert.True(vm.IsRulesModalOpen);
+        Assert.True(vm.IsEditingRule);
+        Assert.Null(vm.RuleEditId);
+    }
+
+    [Fact]
+    public async Task CameraViewModel_UX10_5_ConfiguredAnalyticsMetrics_DynamicAndReflectsOnlyAssignedAnalytics()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+        var analyticService = new StubAnalyticManagementService();
+
+        await analyticService.CreateAsync("cam-2", new CameraAnalyticWriteRequest(
+            Id: "inst-hr",
+            AnalyticTypeId: "hand_raise",
+            Name: "Mano Levantada",
+            Enabled: true,
+            Configuration: new Dictionary<string, object?>()));
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-2", "Cámara 2", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher,
+            analyticService: analyticService);
+
+        await vm.LoadAssignedAnalyticsAsync();
+
+        Assert.True(vm.HasConfiguredAnalyticsMetrics);
+        Assert.False(vm.HasNoConfiguredAnalyticsMetrics);
+        Assert.Single(vm.ConfiguredAnalyticsMetrics);
+        Assert.Equal("hand_raise", vm.ConfiguredAnalyticsMetrics[0].AnalyticTypeId);
+        Assert.Equal("Mano Levantada", vm.ConfiguredAnalyticsMetrics[0].DisplayName);
+        Assert.Equal("Activa", vm.ConfiguredAnalyticsMetrics[0].StatusText);
+        Assert.Equal(0, vm.ConfiguredAnalyticsMetrics[0].EventsCount);
+    }
+
+    [Fact]
+    public void CameraViewModel_UX10_5_Toggle_ChangesButtonTextAndCanonicalState()
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var camService = new StubCameraManagementService();
+
+        var vm = new CameraViewModel(
+            new CameraView("cam-3", "Cámara 3", "0", true, true, true, 30.0, null),
+            camService,
+            dispatcher);
+
+        Assert.True(vm.IsRunning);
+        Assert.Equal("Detener", vm.ButtonText);
+        Assert.Equal("En línea", vm.CanonicalStateText);
+    }
+
     private sealed class StubCameraManagementService : ICameraManagementService
     {
         public Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default) => Task.FromResult<IReadOnlyList<CameraView>>([]);
@@ -599,5 +1428,44 @@ public sealed class DesktopViewModelsTests
         public Task<bool> UpdateZonesAsync(string id, IReadOnlyList<HandRaise.Application.Zones.NormalizedZone> zones, CancellationToken token = default) => Task.FromResult(true);
         public Task<DeviceChangeResult> ChangeDeviceAsync(string deviceId, CancellationToken token = default) => Task.FromResult(new DeviceChangeResult(true, deviceId, null, 10.0));
         public Task<CameraStreamSubscriptionResult> SubscribeStreamAsync(string id, double fps, int quality, CancellationToken token = default) => Task.FromResult(new CameraStreamSubscriptionResult(CameraStreamStatus.NotFound));
+    }
+
+    private sealed class StubRuleStore : IRuleStore
+    {
+        private readonly List<AlertRule> _rules = [];
+
+        public IReadOnlyList<AlertRule> GetRules(string cameraId) => _rules.Where(r => r.CameraId == cameraId).ToList();
+        public IReadOnlyList<AlertRule> GetAllRules() => _rules.ToList();
+
+        public Task<IReadOnlyList<AlertRule>> ListByInstanceAsync(string cameraId, string instanceId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AlertRule>>(_rules.Where(r => r.CameraId == cameraId && r.AnalyticInstanceId == instanceId).ToList());
+
+        public Task<IReadOnlyList<AlertRule>> ListByCameraAsync(string cameraId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AlertRule>>(_rules.Where(r => r.CameraId == cameraId).ToList());
+
+        public Task<IReadOnlyList<AlertRule>> ListAllAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AlertRule>>(_rules.ToList());
+
+        public Task<AlertRule?> GetByIdAsync(string cameraId, string instanceId, string ruleId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_rules.FirstOrDefault(r => r.CameraId == cameraId && r.AnalyticInstanceId == instanceId && r.Id == ruleId));
+
+        public Task<AlertRule> SaveAsync(AlertRule rule, CancellationToken cancellationToken = default)
+        {
+            _rules.RemoveAll(r => r.CameraId == rule.CameraId && r.AnalyticInstanceId == rule.AnalyticInstanceId && r.Id == rule.Id);
+            _rules.Add(rule);
+            return Task.FromResult(rule);
+        }
+
+        public Task<bool> DeleteAsync(string cameraId, string instanceId, string ruleId, CancellationToken cancellationToken = default)
+        {
+            var count = _rules.RemoveAll(r => r.CameraId == cameraId && r.AnalyticInstanceId == instanceId && r.Id == ruleId);
+            return Task.FromResult(count > 0);
+        }
+
+        public Task<int> DeleteByCameraAsync(string cameraId, CancellationToken cancellationToken = default)
+        {
+            var count = _rules.RemoveAll(r => r.CameraId == cameraId);
+            return Task.FromResult(count);
+        }
     }
 }

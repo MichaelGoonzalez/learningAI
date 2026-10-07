@@ -10,7 +10,7 @@ El código de producción es C#/.NET 10; `app/`, `tests/`, `config.yaml` y scrip
 
 ## Estado y roadmap
 
-Pruebas actuales: **367** (99 Domain, 129 Application, 38 Infrastructure.Windows, 86 Host, 15 Desktop), todas superadas en Release.
+Pruebas actuales: **374** (99 Domain, 129 Application, 38 Infrastructure.Windows, 93 Host, 15 Desktop), todas superadas en Release.
 
 | Bloque | Estado |
 |---|---|
@@ -19,8 +19,9 @@ Pruebas actuales: **367** (99 Domain, 129 Application, 38 Infrastructure.Windows
 | E2–E5.5 | Catálogo real (5 analíticas: `hand_raise`, `person_presence`, `zone_intrusion`, `line_crossing`, `person_counting`), líneas virtuales (`lines.json`), freeze contractual (`SPATIAL_LINES_API_CONTRACT_V1.md`) y coexistencia. |
 | E6–E7 | Rules Engine, Alertas Operacionales y Notificaciones (`AlertRule`, `RuleEngine`, `NotificationPolicy`, `NotificationDestination`, Webhook HTTP, MQTT v3.1.1, `rules.json`, `alerts.json`, `notification-*.json`, `NOTIFICATIONS_API_CONTRACT_V1.md`). |
 | E8 | Multi-Model Runtime y Gestión de Capacidad (`IModelRegistry`, `ICapabilityPlanner`, `IInferenceCapabilityProvider`, lazy execution, ejecución compartida de capacidades, `GET /api/v1/models`, `GET /api/v1/cameras/{id}/runtime-plan`, `GET /api/v1/system/capacity` extendido). |
-| E9–E10 | Rebranding VisionControl Edge (`VisionControl.Edge.exe`), Hardening y Release Candidate (`v0.9.0-rc.1`, paquete portable `dist\HandRaise`). |
+| E9–E10 | Rebranding VisionControl Edge (`VisionControl.Edge.exe`), Hardening y Release Candidate (`v0.9.0-rc.1`, paquete portable `dist\VisionControl.Edge`). |
 | UX1–UX3 | Experiencia Camera-First y Flujo IA: Wizard 4 pasos con detección de cámaras USB nativas (`WindowsVideoDeviceEnumerator`), probe en vivo con cuadro JPEG previo a guardar, selector de archivos de video, asistente multi-paso de Solución IA (categorías, sensibilidad, espacios y creación inline) y acciones contextuales. |
+| UX4 Hotfix | Auditoría forense completa, recuperación modular WPF (`Views/`, `Components/`, `Themes/`), guard de integridad `scripts/verify-source-integrity.ps1` integrado en `publish.cmd` y baseline íntegro (374/374 tests). |
 | D2b pendiente | WebSocket de eventos/métricas y MJPEG; aceptar con reconexión y clientes simultáneos sin bloquear inferencia. |
 | D3 pendiente | Manifest/modelos v2 e importación/activar/revertir; aceptar cambio seguro y validación de hash/licencia. |
 | D4 pendiente | Módulos PackageCounting/ConveyorFlow; aceptar conteos deterministas con secuencias sintéticas. |

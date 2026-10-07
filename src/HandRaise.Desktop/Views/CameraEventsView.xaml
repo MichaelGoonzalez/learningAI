@@ -1,0 +1,102 @@
+<UserControl x:Class="HandRaise.Desktop.Views.CameraEventsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,0,24">
+            <!-- Header with Refresh Button -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Historial de Eventos de la Cámara"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource VisionTextPrimary}"/>
+                    <TextBlock Text="Eventos analíticos y detecciones almacenadas para esta cámara"
+                               FontSize="12"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="Actualizar"
+                        Command="{Binding RefreshEventsCommand}"
+                        Padding="14,6"
+                        FontWeight="SemiBold"/>
+            </Grid>
+
+            <!-- Empty State -->
+            <components:EmptyState Title="No hay eventos registrados"
+                                   Description="Esta cámara no ha producido eventos de visión artificial recientemente."
+                                   Visibility="{Binding HasNoEvents, Converter={StaticResource BooleanToVisibility}}"
+                                   Margin="0,0,0,20"/>
+
+            <!-- Events List -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14"
+                    Visibility="{Binding HasEvents, Converter={StaticResource BooleanToVisibility}}">
+                <ItemsControl ItemsSource="{Binding CameraEvents}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="{DynamicResource VisionBorder}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="8,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Thumbnail or Placeholder -->
+                                    <Border Width="60" Height="42" Background="{DynamicResource VisionSurface}" CornerRadius="4" ClipToBounds="True">
+                                        <Grid>
+                                            <TextBlock Text="Sin evidencia" FontSize="9" Foreground="{DynamicResource VisionTextSecondary}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                                                       Visibility="{Binding HasThumbnail, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}"/>
+                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                                   Visibility="{Binding HasThumbnail, Converter={StaticResource BooleanToVisibility}}"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Timestamp -->
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding Timestamp, StringFormat='{}{0:dd/MM/yyyy HH:mm:ss}'}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource VisionTextSecondary}"
+                                               VerticalAlignment="Center"/>
+
+                                    <!-- Event Description -->
+                                    <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                        <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                    </StackPanel>
+
+                                    <!-- Link to Monitor -->
+                                    <Button Grid.Column="4"
+                                            Content="Ver Monitor"
+                                            Command="{Binding DataContext.GoToMonitorCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Background="{DynamicResource VisionSurface}"
+                                            Padding="10,5"
+                                            FontSize="11"
+                                            VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
+

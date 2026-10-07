@@ -1,67 +1,181 @@
-# AGENTS.md — Reglas para agentes (HandRaiseDetection)
+# VisionControl Edge — Project Agent Rules
 
-## Fuente de verdad
-- `README.md` es el único documento vivo del proyecto; `docs/ARCHIVE.md` es histórico y `GEMINI.md`/`CLAUDE.md` solo redirigen. No crear otros `.md`.
-- Lee solo las secciones del README que el bloque toque. No lo resumas ni lo repitas.
+Estas reglas aplican a todo el repositorio VisionControl Edge.
 
-## Ahorro de tokens
-- Respuesta final: código + resumen de máx. 5 líneas. Sin explicaciones largas.
-- Sin confirmaciones intermedias: ante dudas menores, decide y anótalo en 1 línea.
-- Cambios mínimos y localizados. No reescribas archivos completos sin necesidad.
+## 1. Prioridad del agente
 
-## Alcance
-- Implementa SOLO el bloque pedido. No adelantes bloques ni hagas refactors no pedidos.
-- `HandRaise.Domain` es puro: sin OpenCV, ONNX, WPF, SQLite ni ASP.NET.
-- No modifiques el dominio salvo bug real; avisa antes.
+La prioridad es TRABAJAR SOBRE EL CÓDIGO.
 
-## Validación
-- NO ejecutes webcam, ventanas, cámaras, RTSP ni pruebas manuales: el dueño las hace y reporta.
-- Al final, una sola vez: `dotnet build` y los tests unitarios.
-- Tests solo de lógica esencial. Nada de integración con hardware ni snapshots en vivo.
-- Declara en 1 línea lo que no se validó.
+El agente debe concentrarse en:
+- inspeccionar arquitectura;
+- editar archivos;
+- implementar cambios;
+- corregir bugs;
+- mantener contratos;
+- crear o actualizar tests cuando sean necesarios;
+- documentar cambios relevantes.
 
-## Convenciones técnicas
-- C# / .NET 10, Windows x64, Nullable habilitado.
-- `CancellationToken` e `36*21QAZra `Mat`, tensores y sesiones de forma determinista.
-- Dependencias: gratis/open source, licencia verificada y registrada en el README, sin telemetría. Prefiere no agregar ninguna.
-- Reloj: las reglas usan el reloj monotónico del frame; los eventos llevan UTC real anclado. Nunca `DateTime.Now` en el dominio.
-- Credenciales RTSP: nunca en logs ni en texto plano en `appsettings.json`.
-- Cambio de dispositivo en caliente: crear y validar la sesión nueva antes de reemplazar; si falla, conservar la activa.
-- Sin descargas silenciosas de runtimes ni servicios de pago.
+No debe gastar tiempo ni contexto ejecutando automáticamente ciclos completos de validación que el usuario puede realizar después.
 
-## Comandos (cmd.exe)
-```
-set DOTNET_CLI_HOME=%CD%\.dotnet_cli
-set DOTNET_CLI_TELEMETRY_OPTOUT=1
-"C:\Program Files\dotnet\dotnet.exe" build HandRaiseDetection.slnx --configuration Release --no-restore
-"C:\Program Files\dotnet\dotnet.exe" test HandRaiseDetection.slnx --configuration Release --no-restore
-```
+## 2. Builds, tests y publish
 
-## Al terminar un bloque
-- Actualiza el README con máx. 10 líneas: estado del bloque, conteo de pruebas y hasta 3 comandos para probar a mano.
-- Mantén "Registro de avance". Elimina o resume texto obsoleto en lugar de acumularlo.
-- Formato de respuesta final: **Estado** · **Archivos clave** · **No validado** · **Probar a mano**.
+PERMITIDO para el agente:
+- `dotnet build HandRaiseDetection.slnx -c Release` (validar compilación limpia tras cambios)
+- `dotnet test HandRaiseDetection.slnx -c Release --no-restore` (validar regresión de pruebas unitarias)
 
-## Mapa del repo
-- `HandRaiseDetection.slnx` -> solución .NET 10 y proyectos incluidos.
-- `src/HandRaise.Domain/` -> detección, estados y geometría pura.
-- `src/HandRaise.Application/` -> contratos, tracking, pipelines, eventos y puertos.
-- `src/HandRaise.Infrastructure.Windows/` -> OpenCV, Windows ML, DXGI, SQLite, settings y logs.
-- `src/HandRaise.Host/` -> host headless, composición y REST `/api/v1`.
-- `src/HandRaise.Desktop/` -> WPF/MVVM y editor de zonas.
-- `src/HandRaise.DebugApp/` -> diagnóstico, grabación y benchmark.
-- `src/HandRaise.DeviceProbe/`, `src/HandRaise.InferenceProbe/` -> sondas de hardware/inferencia.
-- `tests-csharp/` -> suites xUnit; `models/` -> ONNX y manifiesto.
-- `app/`, `tests/`, `scripts/`, `config.yaml` -> prototipo/herramientas Python, no producción.
-- `packaging/`, `publish.cmd`, `dist/` -> publicación portable y artefactos.
+PROHIBIDO ejecutar automáticamente:
+- `publish.cmd` (empaquetado final reservado para el usuario)
+- publicación portable
+- paquetes de distribución
 
-## Dónde tocar según la tarea
-- Endpoint/auth/ProblemDetails -> `src/HandRaise.Host/HostApplication.cs` y `Api/`.
-- Ciclo de cámaras/API D2 -> `src/HandRaise.Host/Services/`.
-- Regla de mano/estado/zona pura -> `src/HandRaise.Domain/`.
-- Pipeline/tracking/evento/contrato -> `src/HandRaise.Application/`.
-- Captura/overlay/dispositivo/inferencia -> carpeta homónima en `src/HandRaise.Infrastructure.Windows/`.
-- SQLite/migración/snapshot/retención -> `src/HandRaise.Infrastructure.Windows/Storage/`.
-- WPF/editor de zonas -> `src/HandRaise.Desktop/`.
-- Config -> `appsettings.json` del ejecutable y sus tipos `Configuration/`.
-- Tests -> proyecto homónimo bajo `tests-csharp/`; Host usa TestServer sin hardware.
+El agente puede ejecutar `dotnet build` y `dotnet test` para diagnosticar y verificar sus cambios antes de entregar el resultado. No debe ejecutar `publish.cmd`.
+
+## 3. Servidores y aplicaciones
+
+POR DEFECTO, NO:
+- iniciar `VisionControl.Edge.exe`;
+- iniciar `HandRaise.Host`;
+- abrir Kestrel;
+- levantar servidores locales;
+- mantener procesos en background;
+- abrir puertos;
+- ejecutar pruebas LIVE;
+- iniciar streams;
+- iniciar una cámara física;
+- abrir navegador;
+- iniciar procesos que queden residentes.
+
+Estas acciones solo deben ejecutarse cuando el usuario solicite explícitamente una prueba LIVE o cuando una tarea dependa necesariamente de ello.
+
+No iniciar servidores "por si acaso".
+
+## 4. Hardware
+
+NO ejecutar automáticamente pruebas con:
+- cámara USB;
+- RTSP;
+- DirectML;
+- GPU;
+- NVR;
+- dispositivos físicos.
+
+La implementación puede prepararse para ellas. La validación física queda a cargo del usuario salvo instrucción explícita.
+
+## 5. Integridad de archivos
+
+El agente sí puede realizar comprobaciones ligeras de integridad cuando modifica o crea archivos.
+
+Está permitido comprobar tamaño/existencia de archivos y ejecutar:
+`powershell -ExecutionPolicy Bypass -File scripts/verify-source-integrity.ps1`
+
+Esto es especialmente importante debido a incidentes históricos de archivos truncados.
+
+Si aparece un archivo fuente de 0 bytes: DETENERSE.
+
+No continuar desarrollo ni reconstruir silenciosamente sin informar.
+
+## 6. Git
+
+Permitido para inspección:
+- `git status --short`
+- `git diff`
+- `git diff --stat`
+- `git show`
+- `git log`
+
+NO hacer automáticamente:
+- `git commit`
+- `git push`
+- `git reset --hard`
+- `git restore .`
+- rebase
+- merge destructivo
+
+salvo instrucción explícita del usuario.
+
+## 7. Edición segura
+
+Preferir:
+- cambios incrementales;
+- modificar únicamente archivos necesarios;
+- preservar código funcional;
+- no reescribir archivos completos sin necesidad;
+- evitar refactors masivos durante tareas pequeñas.
+
+Después de CREAR un archivo nuevo, comprobar que su tamaño sea mayor que 0 bytes.
+
+## 8. No ampliar alcance
+
+No aprovechar una tarea para:
+- agregar features no solicitadas;
+- crear endpoints nuevos;
+- cambiar contratos congelados;
+- introducir nuevas dependencias;
+- cambiar arquitectura;
+- limpiar código no relacionado.
+
+Si se detecta una mejora adicional, reportarla como recomendación, pero no implementarla sin autorización.
+
+## 9. Principios de arquitectura VisionControl Edge
+
+Mantener:
+- captura de cámara propiedad del Edge;
+- una captura por pipeline;
+- inferencia compartida;
+- tracking compartido;
+- analíticas modulares;
+- configuración por cámara;
+- hot CRUD;
+- Rule Engine desacoplado;
+- notificaciones desacopladas;
+- API REST como frontera con VisionControl Console;
+- contratos JSON `snake_case`;
+- aislamiento de fallos;
+- seguridad de API Key;
+- no exposición de secretos.
+
+## 10. UI/UX Windows
+
+VisionControl Edge es una aplicación de escritorio para operadores.
+
+Debe sentirse:
+- moderna;
+- clara;
+- profesional;
+- visualmente coherente;
+- orientada a tareas;
+- no como una herramienta para desarrolladores.
+
+La cámara es el contexto principal.
+
+El video solo debe estar presente donde aporte a la tarea:
+- Monitor: sí;
+- Espacios: sí;
+- Analíticas IA: no como panel permanente;
+- Reglas: no;
+- Eventos: solo evidencia contextual;
+- Configuración: no.
+
+## 11. Resultado de cada tarea
+
+El agente debe terminar con un reporte breve que incluya:
+- archivos modificados;
+- archivos creados;
+- decisiones importantes;
+- limitaciones;
+- validaciones NO ejecutadas;
+- comandos que el usuario puede ejecutar manualmente.
+
+No ejecutar esas validaciones automáticamente solo para completar el reporte.
+
+## 12. Regla de eficiencia
+
+No gastar tiempo, tokens o ejecución local en:
+- builds repetitivos;
+- publish repetitivo;
+- arranque/parada repetitiva de servidores;
+- tests globales después de cada edición.
+
+Durante desarrollo: trabajar primero en el código.
+
+La validación completa se hace cuando el usuario la solicite o al cerrar una fase.

@@ -1,0 +1,122 @@
+<UserControl x:Class="HandRaise.Desktop.Views.WebConnectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,0,24" MaxWidth="720" HorizontalAlignment="Left">
+            <!-- Header -->
+            <TextBlock Text="Conexión Web"
+                       FontSize="22"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource VisionTextPrimary}"
+                       Margin="0,0,0,4"/>
+            <TextBlock Text="Permite que VisionControl Console se conecte a este equipo para consultar cámaras, métricas, eventos y alertas."
+                       FontSize="12"
+                       Foreground="{DynamicResource VisionTextSecondary}"
+                       Margin="0,0,0,20"/>
+
+            <!-- Remote Access Configuration Card -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18"
+                    Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="ACCESO Y RED"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"/>
+
+                    <!-- Scope Mode -->
+                    <TextBlock Text="Ámbito de escucha de la API:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,6"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                        <RadioButton Content="Solo este equipo (127.0.0.1)"
+                                     IsChecked="{Binding IsLocalOnlyAccess}"
+                                     GroupName="NetworkScope"
+                                     Margin="0,0,16,0"/>
+                        <RadioButton Content="Toda la Red Local / LAN (0.0.0.0)"
+                                     IsChecked="{Binding IsLanAccess}"
+                                     GroupName="NetworkScope"/>
+                    </StackPanel>
+
+                    <!-- API Port -->
+                    <TextBlock Text="Puerto TCP de la API REST / WebSocket:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ApiPort, UpdateSourceTrigger=PropertyChanged}" Width="120" HorizontalAlignment="Left" Padding="6" Margin="0,0,0,16"/>
+
+                    <!-- API Key -->
+                    <TextBlock Text="Clave de Autenticación (API Key):" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding ApiKeyMasked, Mode=OneWay}" IsReadOnly="True" Padding="8"/>
+                        <Button Grid.Column="2" Content="{Binding ApiKeyVisibilityButtonText}" Command="{Binding ToggleApiKeyVisibilityCommand}" Padding="10,6"/>
+                        <Button Grid.Column="4" Content="Copiar" Command="{Binding CopyApiKeyCommand}" Padding="12,6"/>
+                        <Button Grid.Column="6" Content="Regenerar" Command="{Binding RegenerateApiKeyCommand}" Padding="12,6"/>
+                    </Grid>
+
+                    <Button Content="Aplicar y Reiniciar API" Command="{Binding ApplyApiSettingsCommand}" HorizontalAlignment="Left" Padding="14,6" FontWeight="SemiBold"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Endpoints & Quick Copy Card -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18">
+                <StackPanel>
+                    <TextBlock Text="DIRECCIONES DE CONEXIÓN"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"/>
+
+                    <!-- Local address -->
+                    <TextBlock Text="Dirección local (Loopback):" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding LocalAddressText, Mode=OneWay}" IsReadOnly="True" Padding="6"/>
+                        <Button Grid.Column="2" Content="Copiar" Command="{Binding CopyAddressCommand}" Padding="12,6"/>
+                    </Grid>
+
+                    <!-- LAN address -->
+                    <TextBlock Text="Dirección de red local (LAN):" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding LanAddressText, Mode=OneWay}" IsReadOnly="True" Padding="6"/>
+                        <Button Grid.Column="2" Content="Copiar" Command="{Binding CopyLanAddressCommand}" Padding="12,6"/>
+                    </Grid>
+
+                    <!-- Copy All Config Button -->
+                    <Button Content="Copiar Configuración Completa para Consola React"
+                            Command="{Binding CopyConfigurationCommand}"
+                            Padding="16,8"
+                            FontWeight="SemiBold"
+                            HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
+

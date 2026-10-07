@@ -1,0 +1,172 @@
+<UserControl x:Class="HandRaise.Desktop.Views.CamerasView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,0,24">
+            <!-- Header bar with title and Add Camera button -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Administración de Cámaras"
+                               FontSize="22"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource VisionTextPrimary}"/>
+                    <TextBlock Text="Gestión, configuración y control de orígenes de video locales y de red"
+                               FontSize="12"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="+ Agregar Cámara"
+                        Command="{Binding ShowAddCameraModalCommand}"
+                        Padding="16,8"
+                        FontWeight="SemiBold"/>
+            </Grid>
+
+            <!-- Filter bar (Visible only when cameras exist) -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,16"
+                        Visibility="{Binding HasCameras, Converter={StaticResource BooleanToVisibility}}">
+                <TextBlock Text="Filtro por origen:" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource VisionTextSecondary}" />
+                <ComboBox Width="140" SelectedValue="{Binding SelectedCameraFilter}" SelectedValuePath="Content">
+                    <ComboBoxItem Content="Todas" IsSelected="True" />
+                    <ComboBoxItem Content="USB" />
+                    <ComboBoxItem Content="RTSP" />
+                    <ComboBoxItem Content="File" />
+                </ComboBox>
+            </StackPanel>
+
+            <!-- Empty state (When no cameras configured) -->
+            <components:EmptyState Title="No hay cámaras configuradas"
+                                   Description="Para comenzar, conecta una cámara USB, RTSP o un archivo de video."
+                                   ActionText="+ Agregar cámara"
+                                   ActionCommand="{Binding ShowAddCameraModalCommand}"
+                                   Visibility="{Binding HasNoCameras, Converter={StaticResource BooleanToVisibility}}"
+                                   Margin="0,24,0,20"/>
+
+            <!-- Cameras Grid (Tarjetas administrativas limpias y optimizadas) -->
+            <ItemsControl ItemsSource="{Binding FilteredCameras}"
+                          Visibility="{Binding HasCameras, Converter={StaticResource BooleanToVisibility}}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{DynamicResource VisionCardBackground}"
+                                BorderBrush="{DynamicResource VisionBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="16"
+                                Margin="0,0,12,12">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="12"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="14"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Card Header -->
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                        <TextBlock Text="{Binding SourceSummary}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <components:StatusBadge Grid.Column="1" Text="{Binding Status}" Status="{Binding Status}"/>
+                                </Grid>
+
+                                <!-- Administrative Summary Box (Sin decodificación continua de video) -->
+                                <Border Grid.Row="2" Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="12">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="6"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="6"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Soluciones IA:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ActiveAnalyticsSummary}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" TextTrimming="CharacterEllipsis"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Espacios / Geometría:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GeometrySummary, FallbackValue='0 zonas · 0 líneas'}" FontSize="11" Foreground="{DynamicResource VisionTextPrimary}"/>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Rendimiento:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding FramesPerSecond, StringFormat='{}{0:0.0} FPS'}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionAccent}"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Card Actions Footer -->
+                                <Grid Grid.Row="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="6"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="6"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Start / Stop Button -->
+                                    <Button Grid.Column="0"
+                                            Content="{Binding ActionButtonText}"
+                                            Command="{Binding ToggleRunningCommand}"
+                                            Padding="12,6"
+                                            FontSize="11"/>
+
+                                    <!-- Configure Camera Button -->
+                                    <Button Grid.Column="2"
+                                            Content="Configurar"
+                                            Command="{Binding DataContext.OpenCameraDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            Padding="14,6"
+                                            FontSize="11"
+                                            FontWeight="SemiBold"/>
+
+                                    <!-- Duplicate Camera Button -->
+                                    <Button Grid.Column="4"
+                                            Content="Duplicar"
+                                            Command="{Binding DataContext.DuplicateCameraCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            Background="{DynamicResource VisionSurface}"
+                                            Padding="10,6"
+                                            FontSize="11"/>
+
+                                    <!-- Delete Camera Button -->
+                                    <Button Grid.Column="6"
+                                            Content="Eliminar"
+                                            Command="{Binding DataContext.DeleteCameraCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            Background="{DynamicResource VisionSurface}"
+                                            Foreground="{DynamicResource VisionDanger}"
+                                            Padding="10,6"
+                                            FontSize="11"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

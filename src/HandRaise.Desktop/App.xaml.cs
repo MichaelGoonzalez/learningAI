@@ -141,18 +141,42 @@ public partial class App : System.Windows.Application
                 ["WindowBackground"] = "#101317",
                 ["Surface"] = "#191E24",
                 ["SurfaceAlt"] = "#222932",
+                ["SurfaceElevated"] = "#28313D",
                 ["PrimaryText"] = "#F2F5F7",
                 ["SecondaryText"] = "#AAB4BE",
-                ["BorderBrush"] = "#303945"
+                ["MutedText"] = "#6E7681",
+                ["BorderBrush"] = "#303945",
+                ["BorderSubtle"] = "#21262D",
+                ["VisionCardBackground"] = "#191E24",
+                ["VisionSidebarBackground"] = "#161B22",
+                ["VisionSurface"] = "#222932",
+                ["VisionSurfaceElevated"] = "#28313D",
+                ["VisionBorder"] = "#303945",
+                ["VisionBorderSubtle"] = "#21262D",
+                ["VisionTextPrimary"] = "#F2F5F7",
+                ["VisionTextSecondary"] = "#AAB4BE",
+                ["VisionTextMuted"] = "#6E7681"
             }
             : new Dictionary<string, string>
             {
                 ["WindowBackground"] = "#F3F5F7",
                 ["Surface"] = "#FFFFFF",
                 ["SurfaceAlt"] = "#E8EDF2",
+                ["SurfaceElevated"] = "#DFE5EB",
                 ["PrimaryText"] = "#1B232B",
                 ["SecondaryText"] = "#5B6772",
-                ["BorderBrush"] = "#D3DAE1"
+                ["MutedText"] = "#7A8794",
+                ["BorderBrush"] = "#D3DAE1",
+                ["BorderSubtle"] = "#E2E8F0",
+                ["VisionCardBackground"] = "#FFFFFF",
+                ["VisionSidebarBackground"] = "#F8FAFC",
+                ["VisionSurface"] = "#E8EDF2",
+                ["VisionSurfaceElevated"] = "#DFE5EB",
+                ["VisionBorder"] = "#D3DAE1",
+                ["VisionBorderSubtle"] = "#E2E8F0",
+                ["VisionTextPrimary"] = "#1B232B",
+                ["VisionTextSecondary"] = "#5B6772",
+                ["VisionTextMuted"] = "#7A8794"
             };
         foreach (var (key, value) in colors)
         {

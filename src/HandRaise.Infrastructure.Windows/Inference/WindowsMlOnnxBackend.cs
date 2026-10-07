@@ -38,22 +38,26 @@ public sealed class WindowsMlOnnxBackend : IInferenceBackend
         var (sessionOptions, executionInfo) = CreateSessionOptions(Device);
         using (sessionOptions)
         {
-        var newSession = new InferenceSession(model.Path, sessionOptions);
-        try
-        {
-            ValidateModelContract(newSession, model);
-            var previous = Interlocked.Exchange(ref _session, newSession);
-            _model = model;
-            _inputName = newSession.InputNames.Single();
-            _outputName = newSession.OutputNames.First();
-            _executionInfo = executionInfo;
-            previous?.Dispose();
-            newSession = null!;
-        }
-        finally
-        {
-            newSession?.Dispose();
-        }
+            var newSession = new InferenceSession(model.Path, sessionOptions);
+            try
+            {
+                ValidateModelContract(newSession, model);
+                var inputName = newSession.InputNames.Single();
+                var outputName = newSession.OutputNames.First();
+                Warmup(newSession, model, inputName, outputName);
+
+                var previous = Interlocked.Exchange(ref _session, newSession);
+                _model = model;
+                _inputName = inputName;
+                _outputName = outputName;
+                _executionInfo = executionInfo;
+                previous?.Dispose();
+                newSession = null!;
+            }
+            finally
+            {
+                newSession?.Dispose();
+            }
         }
 
         return ValueTask.CompletedTask;
@@ -209,6 +213,24 @@ public sealed class WindowsMlOnnxBackend : IInferenceBackend
         if (session.OutputNames.Count == 0)
         {
             throw new InvalidDataException("El modelo ONNX no tiene salidas.");
+        }
+    }
+
+    private static void Warmup(InferenceSession session, ModelDescriptor model, string inputName, string outputName)
+    {
+        try
+        {
+            var dummyTensor = new float[1 * 3 * model.InputHeight * model.InputWidth];
+            using var input = OrtValue.CreateTensorValueFromMemory(
+                dummyTensor,
+                [1, 3, model.InputHeight, model.InputWidth]);
+            var inputs = new Dictionary<string, OrtValue> { [inputName] = input };
+            using var runOptions = new RunOptions();
+            using var outputs = session.Run(runOptions, inputs, [outputName]);
+        }
+        catch
+        {
+            // El calentamiento es de mejor esfuerzo para precompilar shaders DirectML antes del primer frame en vivo
         }
     }
 }

@@ -1,0 +1,136 @@
+<UserControl x:Class="HandRaise.Desktop.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:views="clr-namespace:HandRaise.Desktop.Views"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="780" d:DesignWidth="950">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+        <Style x:Key="SettingsTabRadio" TargetType="RadioButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="14,8" Margin="0,0,6,0" Cursor="Hand">
+                            <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource SecondaryText}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceAlt}" />
+                                <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource PrimaryText}" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsChecked" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceElevated}" />
+                                <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource PrimaryText}" />
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="14" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- HEADER AND SUB-TABS -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Configuración" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,0,0,4" />
+            <TextBlock Text="Administración global del sistema, procesamiento de IA, red y servicios" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,16" />
+
+            <!-- Segmented Tab Bar -->
+            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="6" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton Content="General" Style="{StaticResource SettingsTabRadio}"
+                                 IsChecked="{Binding IsSystemSelected, Mode=OneWay}"
+                                 Command="{Binding NavigateCommand}" CommandParameter="5" />
+                    <RadioButton Content="Rendimiento e IA" Style="{StaticResource SettingsTabRadio}"
+                                 IsChecked="{Binding IsPerformanceSettingsSelected, Mode=OneWay}"
+                                 Command="{Binding NavigateCommand}" CommandParameter="9" />
+                    <RadioButton Content="Conexión Web" Style="{StaticResource SettingsTabRadio}"
+                                 IsChecked="{Binding IsWebConnectionSelected, Mode=OneWay}"
+                                 Command="{Binding NavigateCommand}" CommandParameter="6" />
+                    <RadioButton Content="Modelos IA" Style="{StaticResource SettingsTabRadio}"
+                                 IsChecked="{Binding IsModelsSelected, Mode=OneWay}"
+                                 Command="{Binding NavigateCommand}" CommandParameter="4" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- SUB-VIEWS CONTENT SWITCHER -->
+        <Grid Grid.Row="2">
+            <!-- 0. GENERAL (SystemView) -->
+            <views:SystemView Visibility="{Binding IsSystemSelected, Converter={StaticResource BooleanToVisibility}}" />
+
+            <!-- 1. RENDIMIENTO E IA -->
+            <ScrollViewer Visibility="{Binding IsPerformanceSettingsSelected, Converter={StaticResource BooleanToVisibility}}" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,0,24" MaxWidth="720" HorizontalAlignment="Left">
+                    <!-- Inference Acceleration & Hardware Card -->
+                    <Border Background="{DynamicResource VisionCardBackground}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="ACELERACIÓN DE HARDWARE Y MOTOR IA" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,14" />
+
+                            <TextBlock Text="Modo de acelerador:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,6" />
+                            <ComboBox ItemsSource="{Binding AccelerationModes}" SelectedItem="{Binding SelectedAccelerationMode}" Padding="10,6" Margin="0,0,0,14" />
+
+                            <TextBlock Text="Perfil de rendimiento del sistema:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,6" />
+                            <ComboBox ItemsSource="{Binding PerformanceProfiles}" SelectedItem="{Binding SelectedPerformanceProfile}" Padding="10,6" Margin="0,0,0,16" />
+
+                            <!-- Status Summary -->
+                            <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="14" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <TextBlock Text="Motor y acelerador activo:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" />
+                                        <TextBlock Text="{Binding ProcessorText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionAccent}" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <Grid Margin="0,0,0,8">
+                                        <TextBlock Text="Rendimiento global actual:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" />
+                                        <TextBlock Text="{Binding AggregateFps, StringFormat='{}{0:0.0} FPS agregados'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <Grid>
+                                        <TextBlock Text="Cámaras activas procesando:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" />
+                                        <TextBlock Text="{Binding ActiveCamerasCountText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Advanced Device Assignment (Collapsed by default) -->
+                            <Expander Header="Ajustes avanzados de dispositivo físico" IsExpanded="False" Foreground="{DynamicResource VisionTextSecondary}" FontSize="12" Margin="0,0,0,14">
+                                <StackPanel Margin="0,10,0,0">
+                                    <TextBlock Text="Dispositivo asignado para inferencia ONNX:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,6" />
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="10" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" DisplayMemberPath="DisplayName" Padding="10,6" />
+                                        <Button Grid.Column="2" Content="Asignar dispositivo" Command="{Binding SwitchDeviceCommand}" Padding="14,6" FontWeight="SemiBold" Cursor="Hand" />
+                                    </Grid>
+                                </StackPanel>
+                            </Expander>
+
+                            <TextBlock Text="DirectML utiliza la aceleración por GPU DirectX 12 disponible en Windows para un procesamiento ultra fluido sin sobrecargar la CPU." FontSize="11" Foreground="{DynamicResource VisionTextMuted}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- 2. CONEXIÓN WEB -->
+            <views:WebConnectionView Visibility="{Binding IsWebConnectionSelected, Converter={StaticResource BooleanToVisibility}}" />
+
+            <!-- 3. MODELOS IA -->
+            <views:ModelsView Visibility="{Binding IsModelsSelected, Converter={StaticResource BooleanToVisibility}}" />
+        </Grid>
+    </Grid>
+</UserControl>

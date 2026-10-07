@@ -63,7 +63,7 @@ public class HandRaiseAnalyticEvaluator : IAnalyticEvaluator
                         _visualPhases[trackId] = phase.Value;
                     }
 
-                    var legacyEvent = MapLegacyEvent(context.CameraId, raisedEvent, context.TimestampUtc, zone);
+                    var legacyEvent = MapLegacyEvent(context.CameraId, _instanceId, raisedEvent, context.TimestampUtc, zone);
                     legacyEvents.Add(legacyEvent);
 
                     genericEvents.Add(MapGenericEvent(context.CameraId, _instanceId, raisedEvent, context.TimestampUtc, zone));
@@ -129,6 +129,7 @@ public class HandRaiseAnalyticEvaluator : IAnalyticEvaluator
 
     private static HandEvent MapLegacyEvent(
         string cameraId,
+        string instanceId,
         RaiseEvent source,
         DateTimeOffset eventTimestampUtc,
         string? zone)
@@ -143,6 +144,13 @@ public class HandRaiseAnalyticEvaluator : IAnalyticEvaluator
         };
         var timestamp = eventTimestampUtc.ToUniversalTime();
         var id = $"{cameraId}:{source.TrackId}:{timestamp.ToUnixTimeMilliseconds()}:{type}";
+        var metadata = new Dictionary<string, object?>
+        {
+            ["hand"] = hand,
+            ["hand_side"] = source.Hand.ToString().ToLowerInvariant(),
+            ["analytic_instance_id"] = instanceId,
+            ["analytic_type"] = "hand_raise"
+        };
         return new HandEvent(
             id,
             type,
@@ -151,7 +159,8 @@ public class HandRaiseAnalyticEvaluator : IAnalyticEvaluator
             hand,
             zone,
             source.Confidence,
-            timestamp);
+            timestamp,
+            Metadata: metadata);
     }
 
     private static AnalyticEvent MapGenericEvent(

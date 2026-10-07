@@ -1,0 +1,483 @@
+<UserControl x:Class="HandRaise.Desktop.Views.FirstRunView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" 
+             d:DesignHeight="780" d:DesignWidth="1100"
+             Background="{DynamicResource WindowBackground}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+    </UserControl.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- TOP BAR: Brand + Theme Toggle -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Brand -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Background="{DynamicResource VisionAccent}" CornerRadius="6" Width="28" Height="28" Margin="0,0,10,0">
+                    <TextBlock Text="VC" FontWeight="Bold" FontSize="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="VisionControl Edge" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource VisionTextPrimary}" />
+                    <TextBlock Text="Configuración guiada inicial" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Theme Toggle -->
+            <Button Grid.Column="1" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}"
+                    Background="{DynamicResource VisionSurface}" Foreground="{DynamicResource VisionTextPrimary}"
+                    BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1"
+                    Padding="12,6" FontSize="11" Cursor="Hand" />
+        </Grid>
+
+        <!-- CENTERED WIZARD CONTAINER -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="32,28"
+                    MaxWidth="660"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <!-- STEP INDICATOR BAR -->
+                    <Border Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="6,5" Margin="0,0,0,24">
+                        <UniformGrid Columns="6">
+                            <!-- 1. Bienvenida -->
+                            <TextBlock Text="1. Bienvenida" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                       Foreground="{Binding IsFirstRunStep1, Converter={StaticResource BooleanToVisibility}, ConverterParameter=accent}" />
+                            <!-- 2. Origen -->
+                            <TextBlock Text="2. Origen" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                       Foreground="{Binding IsFirstRunStep2, Converter={StaticResource BooleanToVisibility}, ConverterParameter=accent}" />
+                            <!-- 3. Configurar -->
+                            <TextBlock Text="3. Configuración" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                       Foreground="{Binding IsFirstRunStep3, Converter={StaticResource BooleanToVisibility}, ConverterParameter=accent}" />
+                            <!-- 4. Probar -->
+                            <TextBlock Text="4. Probar" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                       Foreground="{Binding IsFirstRunStep4, Converter={StaticResource BooleanToVisibility}, ConverterParameter=accent}" />
+                            <!-- 5. Guardar -->
+                            <TextBlock Text="5. Guardar" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                       Foreground="{Binding IsFirstRunStep5, Converter={StaticResource BooleanToVisibility}, ConverterParameter=accent}" />
+                            <!-- 6. Listo -->
+                            <TextBlock Text="6. Listo" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                       Foreground="{Binding IsFirstRunStep6, Converter={StaticResource BooleanToVisibility}, ConverterParameter=accent}" />
+                        </UniformGrid>
+                    </Border>
+
+                    <!-- ============================================== -->
+                    <!-- PASO 1: BIENVENIDA                            -->
+                    <!-- ============================================== -->
+                    <StackPanel Visibility="{Binding IsFirstRunStep1, Converter={StaticResource BooleanToVisibility}}">
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="12" Padding="12,5" HorizontalAlignment="Left" Margin="0,0,0,16">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="8" Height="8" Fill="{DynamicResource VisionAccent}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Primeros pasos · VisionControl Edge" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionAccent}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Configura tu primera cámara"
+                                   FontSize="24"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"
+                                   Margin="0,0,0,8" />
+
+                        <TextBlock Text="VisionControl utiliza las cámaras que tú decidas agregar. Te guiaremos paso a paso para conectar y verificar tu origen de video."
+                                   FontSize="13"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,16" />
+
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="8" Padding="14,12" Margin="0,0,0,24">
+                            <TextBlock Text="Podrás agregar más cámaras y configurar Soluciones IA después de conectar tu primera fuente de video."
+                                       FontSize="11"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       TextWrapping="Wrap" />
+                        </Border>
+
+                        <Button Content="Comenzar →"
+                                Command="{Binding FirstRunStartCommand}"
+                                Background="{DynamicResource VisionAccent}"
+                                Foreground="White"
+                                Padding="20,10"
+                                FontWeight="Bold"
+                                FontSize="13"
+                                HorizontalAlignment="Left"
+                                Cursor="Hand" />
+                    </StackPanel>
+
+                    <!-- ============================================== -->
+                    <!-- PASO 2: ORIGEN                                -->
+                    <!-- ============================================== -->
+                    <StackPanel Visibility="{Binding IsFirstRunStep2, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="¿De dónde viene el video?"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"
+                                   Margin="0,0,0,6" />
+                        <TextBlock Text="Selecciona el tipo de fuente de video principal para esta cámara:"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,0,18" />
+
+                        <!-- USB Card -->
+                        <Border Background="{DynamicResource VisionSurface}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,10">
+                            <RadioButton IsChecked="{Binding IsWizardUsb}" GroupName="FirstRunSourceGroup" VerticalAlignment="Center">
+                                <StackPanel Margin="8,0,0,0">
+                                    <TextBlock Text="Cámara conectada" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource VisionTextPrimary}" />
+                                    <TextBlock Text="USB · integrada · capturadora · cámara local DirectShow" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </RadioButton>
+                        </Border>
+
+                        <!-- RTSP Card -->
+                        <Border Background="{DynamicResource VisionSurface}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,10">
+                            <RadioButton IsChecked="{Binding IsWizardRtsp}" GroupName="FirstRunSourceGroup" VerticalAlignment="Center">
+                                <StackPanel Margin="8,0,0,0">
+                                    <TextBlock Text="Cámara de red" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource VisionTextPrimary}" />
+                                    <TextBlock Text="RTSP / cámara IP de seguridad o flujo de red NVR" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </RadioButton>
+                        </Border>
+
+                        <!-- File Card -->
+                        <Border Background="{DynamicResource VisionSurface}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,20">
+                            <RadioButton IsChecked="{Binding IsWizardFile}" GroupName="FirstRunSourceGroup" VerticalAlignment="Center">
+                                <StackPanel Margin="8,0,0,0">
+                                    <TextBlock Text="Archivo de video" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource VisionTextPrimary}" />
+                                    <TextBlock Text="Para pruebas o análisis de grabaciones locales (MP4, MKV, AVI)" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </RadioButton>
+                        </Border>
+
+                        <!-- Error Message -->
+                        <TextBlock Text="{Binding AddCameraError}" Foreground="{DynamicResource VisionDanger}" FontSize="11" Margin="0,0,0,12" Visibility="{Binding AddCameraError, Converter={StaticResource BooleanToVisibility}}" TextWrapping="Wrap" />
+
+                        <!-- Bottom Nav -->
+                        <Grid>
+                            <Button Content="← Atrás" Command="{Binding FirstRunBackCommand}" Background="Transparent" Foreground="{DynamicResource VisionTextPrimary}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" Padding="14,8" HorizontalAlignment="Left" Cursor="Hand" />
+                            <Button Content="Continuar →" Command="{Binding FirstRunNextCommand}" Background="{DynamicResource VisionAccent}" Foreground="White" Padding="18,8" FontWeight="Bold" HorizontalAlignment="Right" Cursor="Hand" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- ============================================== -->
+                    <!-- PASO 3: CONFIGURACIÓN                         -->
+                    <!-- ============================================== -->
+                    <StackPanel Visibility="{Binding IsFirstRunStep3, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="Configurar origen de video"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"
+                                   Margin="0,0,0,6" />
+                        <TextBlock Text="Especifica los detalles de conexión correspondientes al origen elegido:"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,0,18" />
+
+                        <!-- USB Parameters -->
+                        <StackPanel Visibility="{Binding IsWizardUsb, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,14">
+                            <TextBlock Text="Dispositivo de video local disponible:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4" />
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox ItemsSource="{Binding DetectedUsbDevices}" SelectedItem="{Binding SelectedUsbDevice}" DisplayMemberPath="DisplayName" Padding="8,6" />
+                                <Button Grid.Column="2" Content="Actualizar dispositivos" Command="{Binding RefreshUsbDevicesCommand}" Padding="10,6" FontSize="11" Cursor="Hand" />
+                            </Grid>
+
+                            <Expander Header="Configuración avanzada de índice" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}">
+                                <StackPanel Margin="0,8,0,0">
+                                    <TextBlock Text="Índice de dispositivo DirectShow (ej. 0, 1):" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" />
+                                    <TextBox Text="{Binding WizardUsbIndex, UpdateSourceTrigger=PropertyChanged}" Padding="8" Background="{DynamicResource VisionSurface}" Margin="0,3,0,6" />
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+
+                        <!-- RTSP Parameters -->
+                        <StackPanel Visibility="{Binding IsWizardRtsp, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,14">
+                            <TextBlock Text="Dirección RTSP (ej: rtsp://192.168.1.50:554/stream1):" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding WizardRtspUrl, UpdateSourceTrigger=PropertyChanged}" Padding="8" Background="{DynamicResource VisionSurface}" Margin="0,0,0,10" />
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Usuario (opcional):" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4" />
+                                    <TextBox Text="{Binding WizardRtspUsername, UpdateSourceTrigger=PropertyChanged}" Padding="8" Background="{DynamicResource VisionSurface}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Contraseña (opcional):" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4" />
+                                    <TextBox Text="{Binding WizardRtspPassword, UpdateSourceTrigger=PropertyChanged}" Padding="8" Background="{DynamicResource VisionSurface}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- File Parameters -->
+                        <StackPanel Visibility="{Binding IsWizardFile, Converter={StaticResource BooleanToVisibility}}" Margin="0,0,0,14">
+                            <Button Content="Seleccionar archivo de video..." Command="{Binding BrowseVideoFileCommand}" Padding="14,8" FontWeight="SemiBold" HorizontalAlignment="Left" Margin="0,0,0,10" Cursor="Hand" />
+
+                            <Border Background="{DynamicResource VisionSurface}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,10"
+                                    Visibility="{Binding IsFileSelected, Converter={StaticResource BooleanToVisibility}}">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,4">
+                                        <TextBlock Text="Archivo:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" />
+                                        <TextBlock Text="{Binding FileNameOnly}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding WizardFilePath}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Border>
+
+                            <CheckBox Content="Repetir video automáticamente al finalizar (Loop)" IsChecked="{Binding LoopVideoFile}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        </StackPanel>
+
+                        <!-- Error Message -->
+                        <TextBlock Text="{Binding AddCameraError}" Foreground="{DynamicResource VisionDanger}" FontSize="11" Margin="0,0,0,12" Visibility="{Binding AddCameraError, Converter={StaticResource BooleanToVisibility}}" TextWrapping="Wrap" />
+
+                        <!-- Bottom Nav -->
+                        <Grid>
+                            <Button Content="← Atrás" Command="{Binding FirstRunBackCommand}" Background="Transparent" Foreground="{DynamicResource VisionTextPrimary}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" Padding="14,8" HorizontalAlignment="Left" Cursor="Hand" />
+                            <Button Content="Continuar →" Command="{Binding FirstRunNextCommand}" Background="{DynamicResource VisionAccent}" Foreground="White" Padding="18,8" FontWeight="Bold" HorizontalAlignment="Right" Cursor="Hand" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- ============================================== -->
+                    <!-- PASO 4: PROBAR SEÑAL                          -->
+                    <!-- ============================================== -->
+                    <StackPanel Visibility="{Binding IsFirstRunStep4, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="Prueba de señal en vivo"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"
+                                   Margin="0,0,0,6" />
+                        <TextBlock Text="Verificando que la cámara responda y transmita video correctamente:"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,0,14" />
+
+                        <!-- Video Preview Box -->
+                        <Border Background="#0A0D10" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" CornerRadius="8" ClipToBounds="True" Height="220" Margin="0,0,0,12">
+                            <Grid>
+                                <!-- Placeholder when waiting for frame -->
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            Visibility="{Binding HasTestPreviewImage, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}">
+                                    <TextBlock Text="📹" FontSize="26" HorizontalAlignment="Center" Margin="0,0,0,6" Opacity="0.4"/>
+                                    <TextBlock Text="Esperando señal de video" Foreground="#667085" HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Iniciando vista previa en vivo..." Foreground="#475467" HorizontalAlignment="Center" FontSize="11" Margin="0,2,0,0"
+                                               Visibility="{Binding IsTestingConnection, Converter={StaticResource BooleanToVisibility}}"/>
+                                </StackPanel>
+
+                                <!-- Live Video Image -->
+                                <Image Source="{Binding TestPreviewImage}" Stretch="Uniform" />
+
+                                <!-- "VIDEO EN VIVO" Green Status Badge (Top-Left) -->
+                                <Border Background="#D90F172A" BorderBrush="#22C55E" BorderThickness="1" CornerRadius="4" Padding="8,4" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10"
+                                        Visibility="{Binding IsProbeStreaming, Converter={StaticResource BooleanToVisibility}}">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Width="8" Height="8" Fill="#22C55E" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="VIDEO EN VIVO" FontSize="10" FontWeight="Bold" Foreground="#22C55E" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Telemetry Bar (Bottom Overlay) -->
+                                <Border Background="#E6090D14" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="0,1,0,0" Padding="12,6" VerticalAlignment="Bottom"
+                                        Visibility="{Binding IsProbeStreaming, Converter={StaticResource BooleanToVisibility}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Resolución: " FontSize="10" Foreground="#94A3B8" />
+                                            <TextBlock Text="{Binding ProbeResolutionText}" FontSize="10" FontWeight="SemiBold" Foreground="#F8FAFC" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+                                            <TextBlock Text="FPS: " FontSize="10" Foreground="#94A3B8" />
+                                            <TextBlock Text="{Binding ProbeFpsText}" FontSize="10" FontWeight="SemiBold" Foreground="#38BDF8" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0">
+                                            <TextBlock Text="Latencia: " FontSize="10" Foreground="#94A3B8" />
+                                            <TextBlock Text="{Binding ProbeLatencyText}" FontSize="10" FontWeight="SemiBold" Foreground="#34D399" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- Status Details Card -->
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="{Binding EffectiveWizardSource, StringFormat='Origen: {0}'}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Text="{Binding TestConnectionMessage, TargetNullValue='Probando cámara...'}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding TestConnectionDetails}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" TextWrapping="Wrap" />
+
+                                <Expander Header="Ver detalles técnicos del diagnóstico" Visibility="{Binding HasTechnicalDetails, Converter={StaticResource BooleanToVisibility}}" Margin="0,8,0,0" FontSize="11">
+                                    <TextBox Text="{Binding TestTechnicalDetails, Mode=OneWay}" IsReadOnly="True" Background="#0A0D10" Foreground="#E2E8F0" Padding="6" FontSize="10" TextWrapping="Wrap" MaxHeight="70" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0" />
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Action Buttons Row -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Content="Probar nuevamente" Command="{Binding TestWizardConnectionCommand}" IsEnabled="{Binding IsNotTestingConnection}" Padding="12,6" FontSize="11" FontWeight="SemiBold" Cursor="Hand" />
+                        </Grid>
+
+                        <Expander Header="Opciones avanzadas" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,14">
+                            <StackPanel Margin="0,4,0,0">
+                                <CheckBox Content="Guardar sin probar la conexión" IsChecked="{Binding AllowSaveWithoutProbe}" FontSize="11" FontWeight="SemiBold" />
+                                <TextBlock Text="Permite continuar incluso si la cámara se encuentra apagada o no accesible en este instante." FontSize="10" Foreground="{DynamicResource VisionTextMuted}" Margin="18,2,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- Error Message -->
+                        <TextBlock Text="{Binding AddCameraError}" Foreground="{DynamicResource VisionDanger}" FontSize="11" Margin="0,0,0,12" Visibility="{Binding AddCameraError, Converter={StaticResource BooleanToVisibility}}" TextWrapping="Wrap" />
+
+                        <!-- Bottom Nav -->
+                        <Grid>
+                            <Button Content="← Atrás" Command="{Binding FirstRunBackCommand}" Background="Transparent" Foreground="{DynamicResource VisionTextPrimary}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" Padding="14,8" HorizontalAlignment="Left" Cursor="Hand" />
+                            <Button Content="Continuar →" Command="{Binding FirstRunNextCommand}" Background="{DynamicResource VisionAccent}" Foreground="White" Padding="18,8" FontWeight="Bold" HorizontalAlignment="Right" Cursor="Hand" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- ============================================== -->
+                    <!-- PASO 5: NOMBRAR Y GUARDAR                     -->
+                    <!-- ============================================== -->
+                    <StackPanel Visibility="{Binding IsFirstRunStep5, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="¿Cómo quieres llamar a esta cámara?"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"
+                                   Margin="0,0,0,6" />
+                        <TextBlock Text="Asigna un nombre descriptivo para identificarla en el sistema:"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,0,0,14" />
+
+                        <TextBox Text="{Binding NewCameraName, UpdateSourceTrigger=PropertyChanged}" Padding="8" Background="{DynamicResource VisionSurface}" Margin="0,0,0,8" />
+
+                        <!-- Quick suggestion chips -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                            <TextBlock Text="Sugerencias:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <Button Content="Entrada principal" Command="{Binding FirstRunSetCameraNameSuggestionCommand}" CommandParameter="Entrada principal" Padding="8,4" FontSize="11" Margin="0,0,6,0" Cursor="Hand" />
+                            <Button Content="Bodega" Command="{Binding FirstRunSetCameraNameSuggestionCommand}" CommandParameter="Bodega" Padding="8,4" FontSize="11" Margin="0,0,6,0" Cursor="Hand" />
+                            <Button Content="Recepción" Command="{Binding FirstRunSetCameraNameSuggestionCommand}" CommandParameter="Recepción" Padding="8,4" FontSize="11" Margin="0,0,6,0" Cursor="Hand" />
+                            <Button Content="Cámara norte" Command="{Binding FirstRunSetCameraNameSuggestionCommand}" CommandParameter="Cámara norte" Padding="8,4" FontSize="11" Cursor="Hand" />
+                        </StackPanel>
+
+                        <CheckBox Content="Iniciar transmisión automáticamente al arrancar" IsChecked="{Binding NewCameraAutoStart}" FontWeight="SemiBold" Margin="0,0,0,14" />
+
+                        <!-- Summary Card -->
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="8" Padding="12" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="Resumen de la cámara:" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,0,0,6" />
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="Tipo de origen:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" />
+                                    <TextBlock Text="{Binding WizardSourceType}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right" />
+                                </Grid>
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="Origen:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" />
+                                    <TextBlock Text="{Binding EffectiveWizardSource}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource VisionTextPrimary}" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="320" />
+                                </Grid>
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="Estado de prueba:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" />
+                                    <TextBlock Text="{Binding TestConnectionMessage, TargetNullValue='Sin probar'}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{DynamicResource VisionAccent}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Error Message -->
+                        <TextBlock Text="{Binding AddCameraError}" Foreground="{DynamicResource VisionDanger}" FontSize="11" Margin="0,0,0,12" Visibility="{Binding AddCameraError, Converter={StaticResource BooleanToVisibility}}" TextWrapping="Wrap" />
+
+                        <!-- Bottom Nav -->
+                        <Grid>
+                            <Button Content="← Atrás" Command="{Binding FirstRunBackCommand}" Background="Transparent" Foreground="{DynamicResource VisionTextPrimary}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1" Padding="14,8" HorizontalAlignment="Left" Cursor="Hand" />
+                            <Button Content="Guardar cámara" Command="{Binding FirstRunSaveCameraCommand}" Background="{DynamicResource VisionAccent}" Foreground="White" Padding="18,8" FontWeight="Bold" HorizontalAlignment="Right" Cursor="Hand" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- ============================================== -->
+                    <!-- PASO 6: CÁMARA LISTA                          -->
+                    <!-- ============================================== -->
+                    <StackPanel Visibility="{Binding IsFirstRunStep6, Converter={StaticResource BooleanToVisibility}}">
+                        <!-- Success Badge -->
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="12" Padding="12,5" HorizontalAlignment="Left" Margin="0,0,0,16">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="8" Height="8" Fill="{DynamicResource VisionSuccess}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Cámara configurada con éxito" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource VisionSuccess}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="✓ Cámara lista"
+                                   FontSize="24"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"
+                                   Margin="0,0,0,8" />
+
+                        <TextBlock Text="{Binding NewCameraName, StringFormat='{}{0} está conectada y preparada.'}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource VisionAccent}"
+                                   Margin="0,0,0,6" />
+
+                        <TextBlock Text="Ahora puedes decidir qué quieres detectar con ella."
+                                   FontSize="13"
+                                   Foreground="{DynamicResource VisionTextPrimary}"
+                                   Margin="0,0,0,12" />
+
+                        <Border Background="{DynamicResource VisionSurface}" CornerRadius="8" Padding="14,12" Margin="0,0,0,24">
+                            <TextBlock Text="No se activaron analíticas automáticamente. Puedes añadir soluciones de conteo, permanencia o cruce de línea según las necesidades de tu espacio."
+                                       FontSize="11"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       TextWrapping="Wrap" />
+                        </Border>
+
+                        <!-- Action Buttons -->
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Configurar Soluciones IA →"
+                                    Command="{Binding FirstRunConfigureAiCommand}"
+                                    Background="{DynamicResource VisionAccent}"
+                                    Foreground="White"
+                                    Padding="18,10"
+                                    FontWeight="Bold"
+                                    FontSize="12"
+                                    Margin="0,0,12,0"
+                                    Cursor="Hand" />
+
+                            <Button Content="Ir a la aplicación"
+                                    Command="{Binding FirstRunGoToAppCommand}"
+                                    Background="{DynamicResource VisionSurface}"
+                                    Foreground="{DynamicResource VisionTextPrimary}"
+                                    BorderBrush="{DynamicResource VisionBorder}"
+                                    BorderThickness="1"
+                                    Padding="16,10"
+                                    FontSize="12"
+                                    FontWeight="SemiBold"
+                                    Cursor="Hand" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
+
+        <!-- BOTTOM STATUS TEXT -->
+        <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" FontSize="11" Foreground="{DynamicResource VisionTextMuted}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+    </Grid>
+</UserControl>

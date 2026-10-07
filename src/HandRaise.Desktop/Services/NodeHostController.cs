@@ -43,7 +43,7 @@ public sealed class NodeHostController : IAsyncDisposable
 
     public NodeHostStatus Status => _status;
     public string StatusMessage => _statusMessage;
-    public bool IsRunning => _status == NodeHostStatus.Running;
+    public bool IsRunning => _status == NodeHostStatus.Running || _testCameraService != null;
     public NodeHostSettings CurrentSettings => _currentSettings;
 
     public string BaseUrl => $"http://{(_currentSettings.BindAddress == "0.0.0.0" ? "127.0.0.1" : _currentSettings.BindAddress)}:{_currentSettings.Port}";
@@ -53,7 +53,21 @@ public sealed class NodeHostController : IAsyncDisposable
     public HostRuntimeState? RuntimeState => _app?.Services.GetService<HostRuntimeState>();
     public PreflightChecker? Preflight => _app?.Services.GetService<PreflightChecker>();
     public DiagnosticsProvider? Diagnostics => _app?.Services.GetService<DiagnosticsProvider>();
-    public ICameraManagementService? CameraService => _app?.Services.GetService<ICameraManagementService>();
+    private ICameraManagementService? _testCameraService;
+    private ICameraStore? _testCameraStore;
+
+    public void AttachServicesForTest(ICameraManagementService? cameraService, ICameraStore? cameraStore = null)
+    {
+        _testCameraService = cameraService;
+        _testCameraStore = cameraStore;
+        if (cameraService != null)
+        {
+            _status = NodeHostStatus.Running;
+            _statusMessage = "Sistema listo (Test)";
+        }
+    }
+
+    public ICameraManagementService? CameraService => _testCameraService ?? _app?.Services.GetService<ICameraManagementService>();
     public IAnalyticManagementService? AnalyticService => _app?.Services.GetService<IAnalyticManagementService>();
     public IAnalyticCatalog? AnalyticCatalog => _app?.Services.GetService<IAnalyticCatalog>();
     public IModelRegistry? ModelRegistry => _app?.Services.GetService<IModelRegistry>();
@@ -64,7 +78,7 @@ public sealed class NodeHostController : IAsyncDisposable
     public INotificationPolicyStore? PolicyStore => _app?.Services.GetService<INotificationPolicyStore>();
     public INotificationAttemptStore? AttemptStore => _app?.Services.GetService<INotificationAttemptStore>();
     public HandRaise.Application.Lines.ILineStore? LineStore => _app?.Services.GetService<HandRaise.Application.Lines.ILineStore>();
-    public ICameraStore? CameraStore => _app?.Services.GetService<ICameraStore>();
+    public ICameraStore? CameraStore => _testCameraStore ?? _app?.Services.GetService<ICameraStore>();
     public IHandEventRepository? EventRepository => _app?.Services.GetService<IHandEventRepository>();
     public HandEventBus? EventBus => _app?.Services.GetService<HandEventBus>();
     public INodeCredentialStore? CredentialStore => _app?.Services.GetService<INodeCredentialStore>();
@@ -127,7 +141,7 @@ public sealed class NodeHostController : IAsyncDisposable
             catch (Exception ex)
             {
                 SetStatus(NodeHostStatus.Error,
-                    $"Error al iniciar nodo: {ex.Message}");
+                    $"Error al iniciar el sistema: {ex.Message}");
                 return false;
             }
         }

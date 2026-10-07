@@ -1,7 +1,7 @@
-HAND RAISE DETECTION - CARPETA PORTABLE
+VISIONCONTROL EDGE - CARPETA PORTABLE
 
 Requisito: Windows 11 x64. No requiere instalar .NET ni Python.
-Abra HandRaise\HandRaise.Desktop.exe. Mantenga juntos el ejecutable, las DLL, appsettings.json y models.
+Abra VisionControl.Edge\VisionControl.Edge.exe. Mantenga juntos el ejecutable, las DLL, appsettings.json y models.
 Los ajustes, zonas, eventos, snapshots y logs quedan en %LOCALAPPDATA%\HandRaiseDetection.
-La carpeta HandRaise\data se incluye como carpeta de datos portable predeterminada/reservada.
+La carpeta VisionControl.Edge\data se incluye como carpeta de datos portable predeterminada/reservada.
 Para desinstalar, cierre la aplicación y borre la carpeta portable. Para borrar también sus datos, elimine %LOCALAPPDATA%\HandRaiseDetection.

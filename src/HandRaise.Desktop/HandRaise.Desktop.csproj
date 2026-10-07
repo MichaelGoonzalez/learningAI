@@ -17,6 +17,7 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
     <ProjectReference Include="../HandRaise.Application/HandRaise.Application.csproj" />
     <ProjectReference Include="../HandRaise.Domain/HandRaise.Domain.csproj" />
     <ProjectReference Include="../HandRaise.Infrastructure.Windows/HandRaise.Infrastructure.Windows.csproj" />
@@ -26,6 +27,7 @@
   <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
     <Content Include="../../models/yolo26n-pose.onnx" Link="models/yolo26n-pose.onnx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

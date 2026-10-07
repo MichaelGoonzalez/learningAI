@@ -215,6 +215,130 @@ public sealed class RuleEngineTests
         Assert.Equal("rule-process", stored.RuleId);
     }
 
+    [Fact]
+    public async Task ProcessEventAsync_HandRaiseEvent_MatchesRuleAndEmitsAlert()
+    {
+        var rule = new AlertRule(
+            Id: "rule-hand-1",
+            CameraId: "cam-01",
+            AnalyticInstanceId: "an-cam1-handraise",
+            Name: "Alerta Mano Levantada",
+            Enabled: true,
+            Severity: AlertSeverity.High,
+            EventTypes: ["hand_raised"]);
+
+        var ruleProvider = new TestRuleProvider([rule]);
+        var alertStore = new InMemoryTestAlertStore();
+        var engine = new RuleEngine(ruleProvider, alertStore);
+
+        // Simulate event created with instance ID
+        var ev = new AnalyticEvent(
+            Id: "ev-hand-101",
+            CameraId: "cam-01",
+            AnalyticInstanceId: "an-cam1-handraise",
+            AnalyticType: "hand_raise",
+            EventType: "hand_raised",
+            TimestampUtc: DateTimeOffset.UtcNow,
+            Confidence: 0.95);
+
+        var alerts = await engine.ProcessEventAsync(ev);
+        Assert.Single(alerts);
+        Assert.Equal("rule-hand-1", alerts[0].RuleId);
+        Assert.Equal("cam-01", alerts[0].CameraId);
+        Assert.Equal(AlertSeverity.High, alerts[0].Severity);
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_LegacyHandRaiseInstance_MatchesRuleViaFallback()
+    {
+        var rule = new AlertRule(
+            Id: "rule-hand-2",
+            CameraId: "cam-01",
+            AnalyticInstanceId: "an-cam1-handraise",
+            Name: "Alerta Mano Levantada",
+            Enabled: true,
+            Severity: AlertSeverity.Critical,
+            EventTypes: ["hand_raised"]);
+
+        var ruleProvider = new TestRuleProvider([rule]);
+        var alertStore = new InMemoryTestAlertStore();
+        var engine = new RuleEngine(ruleProvider, alertStore);
+
+        // Simulate event with legacy_hand_raise instance ID
+        var ev = new AnalyticEvent(
+            Id: "ev-hand-102",
+            CameraId: "cam-01",
+            AnalyticInstanceId: "legacy_hand_raise",
+            AnalyticType: "hand_raise",
+            EventType: "hand_raised",
+            TimestampUtc: DateTimeOffset.UtcNow,
+            Confidence: 0.92);
+
+        var alerts = await engine.ProcessEventAsync(ev);
+        Assert.Single(alerts);
+        Assert.Equal("rule-hand-2", alerts[0].RuleId);
+        Assert.Equal(AlertSeverity.Critical, alerts[0].Severity);
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_DisabledRule_EmitsZeroAlerts()
+    {
+        var rule = new AlertRule(
+            Id: "rule-disabled",
+            CameraId: "cam-01",
+            AnalyticInstanceId: "inst-01",
+            Name: "Disabled Rule",
+            Enabled: false,
+            Severity: AlertSeverity.High,
+            EventTypes: ["hand_raised"]);
+
+        var ruleProvider = new TestRuleProvider([rule]);
+        var alertStore = new InMemoryTestAlertStore();
+        var engine = new RuleEngine(ruleProvider, alertStore);
+
+        var ev = new AnalyticEvent(
+            Id: "ev-hand-103",
+            CameraId: "cam-01",
+            AnalyticInstanceId: "inst-01",
+            AnalyticType: "hand_raise",
+            EventType: "hand_raised",
+            TimestampUtc: DateTimeOffset.UtcNow);
+
+        var alerts = await engine.ProcessEventAsync(ev);
+        Assert.Empty(alerts);
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_Cooldown_SuppressesDuplicateAlertsWithinWindow()
+    {
+        var rule = new AlertRule(
+            Id: "rule-cooldown",
+            CameraId: "cam-01",
+            AnalyticInstanceId: "inst-01",
+            Name: "Cooldown Rule",
+            Enabled: true,
+            Severity: AlertSeverity.Medium,
+            EventTypes: ["hand_raised"],
+            CooldownMs: 5000);
+
+        var ruleProvider = new TestRuleProvider([rule]);
+        var alertStore = new InMemoryTestAlertStore();
+        var engine = new RuleEngine(ruleProvider, alertStore);
+
+        var baseTime = DateTimeOffset.UtcNow;
+        var ev1 = new AnalyticEvent("ev-1", "cam-01", "inst-01", "hand_raise", "hand_raised", baseTime);
+        var ev2 = new AnalyticEvent("ev-2", "cam-01", "inst-01", "hand_raise", "hand_raised", baseTime.AddSeconds(2));
+        var ev3 = new AnalyticEvent("ev-3", "cam-01", "inst-01", "hand_raise", "hand_raised", baseTime.AddSeconds(6));
+
+        var alerts1 = await engine.ProcessEventAsync(ev1);
+        var alerts2 = await engine.ProcessEventAsync(ev2);
+        var alerts3 = await engine.ProcessEventAsync(ev3);
+
+        Assert.Single(alerts1);
+        Assert.Empty(alerts2); // Suppressed within 5s cooldown
+        Assert.Single(alerts3); // Emitted after 5s cooldown
+    }
+
     private sealed class TestRuleProvider(IReadOnlyList<AlertRule> rules) : IRuleProvider
     {
         public IReadOnlyList<AlertRule> GetRules(string cameraId) =>

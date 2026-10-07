@@ -13,4 +13,7 @@ public sealed record CameraPipelineMetrics(
     double TotalMilliseconds,
     double AnalyticDurationMilliseconds = 0.0,
     int EvaluatorErrors = 0,
-    int ActiveAnalyticCount = 0);
+    int ActiveAnalyticCount = 0,
+    double InferenceFps = 0.0,
+    long DroppedInferenceFrames = 0,
+    int QueueDepth = 0);

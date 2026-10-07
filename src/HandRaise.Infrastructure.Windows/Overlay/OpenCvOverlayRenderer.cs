@@ -60,8 +60,17 @@ public sealed class OpenCvOverlayRenderer : IFrameOverlay
     private static Mat ToMat(VideoFrame frame)
     {
         var mat = new Mat(frame.Height, frame.Width, MatType.CV_8UC3);
-        var pixels = frame.Pixels.ToArray();
-        Marshal.Copy(pixels, 0, mat.Data, pixels.Length);
+        if (MemoryMarshal.TryGetArray(frame.Pixels, out var segment) && segment.Array is not null)
+        {
+            Marshal.Copy(segment.Array, segment.Offset, mat.Data, segment.Count);
+        }
+        else
+        {
+            var span = frame.Pixels.Span;
+            var temp = new byte[span.Length];
+            span.CopyTo(temp);
+            Marshal.Copy(temp, 0, mat.Data, temp.Length);
+        }
         return mat;
     }
 
@@ -168,6 +177,11 @@ public sealed class OpenCvOverlayRenderer : IFrameOverlay
 
     private static void DrawStatistics(Mat mat, OverlayStatistics statistics)
     {
+        if (string.IsNullOrWhiteSpace(statistics.Model))
+        {
+            return;
+        }
+
         var lines = new[]
         {
             $"FPS {statistics.FramesPerSecond:0.0} | {statistics.TotalLatencyMilliseconds:0.0} ms",

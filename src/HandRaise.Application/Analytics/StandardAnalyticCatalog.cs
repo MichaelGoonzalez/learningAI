@@ -38,22 +38,22 @@ public class StandardAnalyticCatalog : IAnalyticCatalog
                 Description: "Exige que la muñeca supere el margen superior con holgura estricta."),
             new ParameterDefinition(
                 Key: "consecutive_frames",
-                Label: "Frames Consecutivos",
+                Label: "Cuadros de confirmación",
                 Type: ParameterType.Number,
                 DefaultValue: 3,
                 Min: 1,
                 Max: 30,
                 Step: 1,
-                Description: "Frames requeridos para confirmar el gesto."),
+                Description: "Número de cuadros de video requeridos para confirmar el gesto."),
             new ParameterDefinition(
                 Key: "cooldown_ms",
-                Label: "Tiempo de Cooldown (ms)",
+                Label: "Tiempo de espera entre alertas (ms)",
                 Type: ParameterType.Number,
                 DefaultValue: 1000,
                 Min: 0,
                 Max: 10000,
                 Step: 100,
-                Description: "Tiempo mínimo antes de reemitir un evento para el mismo track.")
+                Description: "Tiempo mínimo antes de volver a emitir una alerta para la misma persona.")
         ]);
 
     public static readonly AnalyticDefinition PersonPresenceDefinition = new(
@@ -211,13 +211,13 @@ public class StandardAnalyticCatalog : IAnalyticCatalog
                 Description: "Umbral mínimo de confianza de detección."),
             new ParameterDefinition(
                 Key: "crossing_cooldown_ms",
-                Label: "Tiempo de cooldown (ms)",
+                Label: "Tiempo de espera entre alertas (ms)",
                 Type: ParameterType.Number,
                 DefaultValue: 1500,
                 Min: 0,
                 Max: 30000,
                 Step: 250,
-                Description: "Tiempo mínimo antes de registrar un nuevo cruce para el mismo track."),
+                Description: "Tiempo mínimo antes de registrar un nuevo cruce para la misma persona."),
             new ParameterDefinition(
                 Key: "emit_snapshot",
                 Label: "Guardar evidencia",

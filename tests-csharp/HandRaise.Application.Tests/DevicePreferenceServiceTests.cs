@@ -35,6 +35,43 @@ public sealed class DevicePreferenceServiceTests
         Assert.Equal("cpu", store.Settings.DeviceId);
     }
 
+    [Fact]
+    public void ResolveModeOrDevice_ResolvesCpuWhenCpuModeExplicitlyRequested()
+    {
+        var cpu = new DeviceInfo("cpu", "CPU", HardwareVendor.Cpu, InferenceBackend.Cpu, null, null, null, true);
+        var gpu = new DeviceInfo("dml", "DirectML GPU", HardwareVendor.Nvidia, InferenceBackend.DirectMl, 0, 8192, null, true);
+
+        var selection = DeviceSelector.ResolveModeOrDevice([cpu, gpu], "cpu", "dml");
+
+        Assert.Equal("cpu", selection.Device.Id);
+        Assert.False(selection.UsedFallback);
+    }
+
+    [Fact]
+    public void ResolveModeOrDevice_ResolvesDirectMlWhenGpuModeRequested()
+    {
+        var cpu = new DeviceInfo("cpu", "CPU", HardwareVendor.Cpu, InferenceBackend.Cpu, null, null, null, true);
+        var gpu = new DeviceInfo("dml", "DirectML GPU", HardwareVendor.Nvidia, InferenceBackend.DirectMl, 0, 8192, null, true);
+
+        var selection = DeviceSelector.ResolveModeOrDevice([cpu, gpu], "gpu", null);
+
+        Assert.Equal("dml", selection.Device.Id);
+        Assert.False(selection.UsedFallback);
+    }
+
+    [Fact]
+    public void ResolveModeOrDevice_FallsBackToCpuWhenGpuRequestedButUnavailable()
+    {
+        var cpu = new DeviceInfo("cpu", "CPU", HardwareVendor.Cpu, InferenceBackend.Cpu, null, null, null, true);
+        var gpu = new DeviceInfo("dml", "DirectML GPU", HardwareVendor.Nvidia, InferenceBackend.DirectMl, 0, 8192, null, false, "Driver incompatible");
+
+        var selection = DeviceSelector.ResolveModeOrDevice([cpu, gpu], "gpu", null);
+
+        Assert.Equal("cpu", selection.Device.Id);
+        Assert.True(selection.UsedFallback);
+        Assert.NotNull(selection.Warning);
+    }
+
     private sealed class MemorySettingsStore(UserSettings initial) : IUserSettingsStore
     {
         public string FilePath => "memory://settings";

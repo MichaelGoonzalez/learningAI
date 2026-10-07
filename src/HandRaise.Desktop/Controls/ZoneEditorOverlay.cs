@@ -66,7 +66,7 @@ public sealed class ZoneEditorOverlay : FrameworkElement
         }
         if (Editing)
         {
-            DrawPolygon(drawingContext, DraftPoints, rect, new Pen(Brushes.Gold, 2), false);
+            DrawPolygon(drawingContext, DraftPoints, rect, new Pen(Brushes.Gold, 2), DraftPoints.Count >= 3);
             foreach (var point in DraftPoints) DrawHandle(drawingContext, ToView(point, rect), Brushes.Gold);
         }
     }

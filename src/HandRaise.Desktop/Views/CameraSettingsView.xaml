@@ -1,0 +1,104 @@
+<UserControl x:Class="HandRaise.Desktop.Views.CameraSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,0,24" MaxWidth="650" HorizontalAlignment="Left">
+            <!-- Header -->
+            <TextBlock Text="Configuración de Cámara"
+                       FontSize="20"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource VisionTextPrimary}"
+                       Margin="0,0,0,4"/>
+            <TextBlock Text="Ajuste los parámetros operativos, fuente de captura e identidad de la cámara"
+                       FontSize="12"
+                       Foreground="{DynamicResource VisionTextSecondary}"
+                       Margin="0,0,0,20"/>
+
+            <!-- General Settings Card -->
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="20"
+                    Margin="0,0,0,24">
+                <StackPanel>
+                    <TextBlock Text="PARÁMETROS GENERALES"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"/>
+
+                    <TextBlock Text="Nombre descriptivo:" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,14" Padding="8"/>
+
+                    <TextBlock Text="Fuente de video (USB index, RTSP URL o ruta de archivo):" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding EditSource, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,14" Padding="8"/>
+
+                    <CheckBox Content="Iniciar transmisión automáticamente al iniciar el sistema"
+                              IsChecked="{Binding EditEnabled}"
+                              FontWeight="SemiBold"
+                              Margin="0,0,0,16"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <Button Content="Probar Conexión"
+                                Command="{Binding TestConfigConnectionCommand}"
+                                IsEnabled="{Binding IsTestingConfigConnection, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}"
+                                Padding="14,8"
+                                Margin="0,0,10,0"/>
+
+                        <Button Content="Guardar Cambios"
+                                Command="{Binding SaveConfigCommand}"
+                                Padding="16,8"
+                                FontWeight="Bold"/>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding ConfigMessage}"
+                               FontSize="12"
+                               Foreground="{DynamicResource VisionAccent}"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Danger Zone -->
+            <TextBlock Text="ZONA DE PELIGRO"
+                       FontSize="12"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource VisionDanger}"
+                       Margin="0,0,0,8"/>
+
+            <Border Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionDanger}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="20">
+                <StackPanel>
+                    <TextBlock Text="Eliminar Cámara Permanentemente"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource VisionDanger}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="Esta acción removerá la cámara, sus zonas, reglas y configuraciones asociadas del sistema de forma irreversible."
+                               FontSize="12"
+                               Foreground="{DynamicResource VisionTextSecondary}"
+                               Margin="0,0,0,14"
+                               TextWrapping="Wrap"/>
+                    <Button Content="Eliminar Cámara"
+                            Command="{Binding DataContext.DeleteCameraCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                            CommandParameter="{Binding}"
+                            Background="{DynamicResource VisionDanger}"
+                            Foreground="White"
+                            Padding="16,8"
+                            FontWeight="Bold"
+                            HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
+

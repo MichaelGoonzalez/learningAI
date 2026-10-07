@@ -12,7 +12,10 @@ public sealed record CameraRuntimeStatus(
     double LatencyMilliseconds,
     double AverageDecodeMilliseconds,
     double AverageInferenceMilliseconds,
-    string? Error);
+    string? Error,
+    double InferenceFps = 0.0,
+    long DroppedInferenceFrames = 0,
+    int QueueDepth = 0);
 
 public sealed record PipelineMetricsSnapshot(
     string NodeId,
@@ -208,6 +211,9 @@ public sealed class PipelineMetricsRegistry(
                     LatencyMilliseconds = metrics.TotalMilliseconds,
                     AverageDecodeMilliseconds = _decodeTotal / _samples,
                     AverageInferenceMilliseconds = _inferenceTotal / _samples,
+                    InferenceFps = metrics.InferenceFps,
+                    DroppedInferenceFrames = metrics.DroppedInferenceFrames,
+                    QueueDepth = metrics.QueueDepth,
                     Error = null
                 };
             }
@@ -215,7 +221,7 @@ public sealed class PipelineMetricsRegistry(
 
         public void SetOffline(string? error)
         {
-            lock (_sync) _status = _status with { Online = false, FramesPerSecond = 0, Error = error };
+            lock (_sync) _status = _status with { Online = false, FramesPerSecond = 0, InferenceFps = 0, Error = error };
         }
 
         public CameraRuntimeStatus Snapshot()

@@ -34,11 +34,63 @@ public sealed class CameraAnalyticItemViewModel : ObservableObject
     public string CameraId => _instance.CameraId;
     public string DisplayName => _definition?.DisplayName ?? _instance.Name ?? _instance.AnalyticTypeId;
     public string Description => _definition?.Description ?? string.Empty;
-    public string Category => _definition?.Category.ToString() ?? "General";
+    public string Category => _definition?.Category switch
+    {
+        AnalyticCategory.Security => "Seguridad",
+        AnalyticCategory.Safety => "Seguridad operativa",
+        AnalyticCategory.Operations => "Operaciones",
+        AnalyticCategory.Logistics => "Logística",
+        AnalyticCategory.General => "General",
+        _ => "General"
+    };
     public string Version => _definition?.Version ?? "1.0.0";
     public string CapabilitiesSummary => _definition?.RequiredCapabilities.Count > 0
-        ? string.Join(", ", _definition.RequiredCapabilities.Select(c => c.ToString()))
-        : "PoseEstimation";
+        ? string.Join(", ", _definition.RequiredCapabilities.Select(TranslateCapability))
+        : "Detección de posturas y gestos";
+
+    private static string TranslateCapability(InferenceCapability capability) => capability switch
+    {
+        InferenceCapability.PoseEstimation => "Detección de posturas y gestos",
+        InferenceCapability.ObjectDetection => "Detección de personas y objetos",
+        InferenceCapability.Tracking => "Seguimiento de movimiento",
+        InferenceCapability.Classification => "Clasificación visual",
+        InferenceCapability.Segmentation => "Segmentación de áreas",
+        _ => capability.ToString()
+    };
+
+    public string Icon => AnalyticTypeId switch
+    {
+        "person_presence" => "👤",
+        "zone_intrusion" => "🛑",
+        "line_crossing" => "↔️",
+        "person_counting" => "🔢",
+        "hand_raise" => "✋",
+        _ => "⚡"
+    };
+
+    public string ToggleText => _enabled ? "Pausar" : "Reanudar";
+
+    public string ContextSummary
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (_instance.AssignedZoneIds is { Count: > 0 } z) parts.Add($"Zona: {string.Join(", ", z)}");
+            if (_instance.AssignedLineIds is { Count: > 0 } l) parts.Add($"Línea: {string.Join(", ", l)}");
+            if (_instance.Configuration != null)
+            {
+                if (_instance.Configuration.TryGetValue("confidence_threshold", out var conf) && conf is not null)
+                {
+                    if (double.TryParse(conf.ToString(), out var cVal)) parts.Add($"Confianza: {cVal:P0}");
+                }
+                else if (_instance.Configuration.TryGetValue("consecutive_frames", out var cf) && cf is not null)
+                {
+                    parts.Add($"Cuadros: {cf}");
+                }
+            }
+            return parts.Count > 0 ? string.Join(" · ", parts) : "Configuración estándar";
+        }
+    }
 
     public bool Enabled
     {
@@ -49,6 +101,7 @@ public sealed class CameraAnalyticItemViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(StatusText));
                 OnPropertyChanged(nameof(StatusBrush));
+                OnPropertyChanged(nameof(ToggleText));
             }
         }
     }

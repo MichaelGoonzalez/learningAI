@@ -73,7 +73,57 @@ public class AnalyticEvaluatorFactory : IAnalyticEvaluatorFactory
             };
         }
 
+        if (string.Equals(instance.AnalyticTypeId, "line_crossing", StringComparison.OrdinalIgnoreCase))
+        {
+            var confidence = ExtractDouble(instance.Configuration, "confidence_threshold", 0.60);
+            var cooldownMs = ExtractInt(instance.Configuration, "crossing_cooldown_ms", 1500);
+            var emitSnapshot = ExtractBoolean(instance.Configuration, "emit_snapshot", true);
+
+            return new LineCrossingAnalyticEvaluator(
+                instanceId: instance.Id,
+                assignedLineIds: instance.AssignedLineIds,
+                confidenceThreshold: confidence,
+                cooldownMs: cooldownMs,
+                emitSnapshot: emitSnapshot)
+            {
+                IsEnabled = instance.Enabled
+            };
+        }
+
+        if (string.Equals(instance.AnalyticTypeId, "person_counting", StringComparison.OrdinalIgnoreCase))
+        {
+            var confidence = ExtractDouble(instance.Configuration, "confidence_threshold", 0.60);
+            var entryDirection = ExtractString(instance.Configuration, "entry_direction", "a_to_b");
+            var initialOccupancy = ExtractInt(instance.Configuration, "initial_occupancy", 0);
+            var minimumOccupancy = ExtractInt(instance.Configuration, "minimum_occupancy", 0);
+            var maximumOccupancy = ExtractInt(instance.Configuration, "maximum_occupancy", 0);
+
+            return new PersonCountingAnalyticEvaluator(
+                instanceId: instance.Id,
+                assignedLineIds: instance.AssignedLineIds,
+                confidenceThreshold: confidence,
+                entryDirection: entryDirection,
+                initialOccupancy: initialOccupancy,
+                minimumOccupancy: minimumOccupancy,
+                maximumOccupancy: maximumOccupancy)
+            {
+                IsEnabled = instance.Enabled
+            };
+        }
+
         throw new NotSupportedException($"El tipo de analítica '{instance.AnalyticTypeId}' no tiene evaluador disponible.");
+    }
+
+    private static string ExtractString(IReadOnlyDictionary<string, object?>? config, string key, string defaultValue)
+    {
+        if (config == null || !config.TryGetValue(key, out var val) || val == null)
+            return defaultValue;
+
+        if (val is string s) return s;
+        if (val is JsonElement elem && elem.ValueKind == JsonValueKind.String)
+            return elem.GetString() ?? defaultValue;
+
+        return val.ToString() ?? defaultValue;
     }
 
     private static double ExtractDouble(IReadOnlyDictionary<string, object?>? config, string key, double defaultValue)

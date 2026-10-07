@@ -14,11 +14,39 @@ public sealed class JsonCameraStore(string path) : ICameraStore, IDisposable
         await _gate.WaitAsync(token);
         try
         {
-            if (File.Exists(_path)) return;
+            if (File.Exists(_path))
+            {
+                await MigrateLegacyFactorySeedAsync(token);
+                return;
+            }
             foreach (var camera in seed) Validate(camera);
             await WriteAsync(seed, token);
         }
         finally { _gate.Release(); }
+    }
+
+    private async Task MigrateLegacyFactorySeedAsync(CancellationToken token)
+    {
+        try
+        {
+            var values = (await ReadAsync(token)).ToList();
+            if (values.Count == 0) return;
+
+            var legacyFactorySeed = values.FirstOrDefault(c =>
+                string.Equals(c.Id, "camera-0", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.Name, "Cámara principal", StringComparison.OrdinalIgnoreCase) &&
+                c.Source == "0" &&
+                c.Zones.Count == 0);
+
+            if (legacyFactorySeed is not null)
+            {
+                values.Remove(legacyFactorySeed);
+                await WriteAsync(values, token);
+            }
+        }
+        catch
+        {
+        }
     }
 
     public async Task<IReadOnlyList<CameraDefinition>> ListAsync(CancellationToken token = default)

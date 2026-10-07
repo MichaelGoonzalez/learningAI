@@ -4,16 +4,24 @@ namespace HandRaise.Application.Hardware;
 
 public sealed class DevicePreferenceService(IUserSettingsStore settingsStore)
 {
+    public async Task<UserSettings> GetSettingsAsync(CancellationToken cancellationToken = default) =>
+        await settingsStore.LoadAsync(cancellationToken);
+
+    public async Task SaveSettingsAsync(UserSettings settings, CancellationToken cancellationToken = default) =>
+        await settingsStore.SaveAsync(settings, cancellationToken);
+
     public async Task<DeviceSelection> InitializeAsync(
         IReadOnlyList<DeviceInfo> devices,
         CancellationToken cancellationToken = default)
     {
         var settings = await settingsStore.LoadAsync(cancellationToken);
-        var selection = DeviceSelector.ResolveSavedDevice(devices, settings.DeviceId);
+        var selection = DeviceSelector.ResolveModeOrDevice(devices, settings.AccelerationMode, settings.DeviceId);
 
         if (settings.DeviceId is null || selection.UsedFallback)
         {
-            await settingsStore.SaveAsync(new UserSettings(selection.Device.Id), cancellationToken);
+            await settingsStore.SaveAsync(
+                settings with { DeviceId = selection.Device.Id },
+                cancellationToken);
         }
 
         return selection;
@@ -39,7 +47,8 @@ public sealed class DevicePreferenceService(IUserSettingsStore settingsStore)
                 selected.UnavailableReason ?? $"El dispositivo '{deviceId}' no está disponible.");
         }
 
-        await settingsStore.SaveAsync(new UserSettings(selected.Id), cancellationToken);
+        var current = await settingsStore.LoadAsync(cancellationToken);
+        await settingsStore.SaveAsync(current with { DeviceId = selected.Id }, cancellationToken);
         return selected;
     }
 }

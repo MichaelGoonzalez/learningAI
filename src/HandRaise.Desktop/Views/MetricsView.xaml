@@ -1,0 +1,527 @@
+<UserControl x:Class="HandRaise.Desktop.Views.MetricsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="800" d:DesignWidth="1100">
+    <Grid>
+        <!-- 1. OVERVIEW: RESUMEN GENERAL DE MÉTRICAS -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Visibility="{Binding IsMetricsOverviewOpen, Converter={StaticResource BooleanToVisibility}}">
+            <StackPanel Margin="0,0,0,24">
+                <!-- Header -->
+                <Grid Margin="0,0,0,16">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Métricas y Supervisión"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource VisionTextPrimary}"/>
+                        <TextBlock Text="Supervisión técnica del nodo Edge, rendimiento del procesamiento y verificación de analíticas"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- KPI Cards Row -->
+                <UniformGrid Columns="4" Margin="0,0,0,20">
+                    <components:MetricCard Title="CÁMARAS ACTIVAS"
+                                          Value="{Binding RunningCamerasCount}"
+                                          Subtitle="{Binding TotalCamerasCount, StringFormat='{}de {0} configuradas'}"
+                                          Margin="0,0,10,0"/>
+                    <components:MetricCard Title="SOLUCIONES IA"
+                                          Value="{Binding TotalActiveAnalyticsCount}"
+                                          Subtitle="En ejecución simultánea"
+                                          Margin="0,0,10,0"/>
+                    <components:MetricCard Title="FPS PROMEDIO"
+                                          Value="{Binding AggregateFps, StringFormat='{}{0:0.0} FPS'}"
+                                          Subtitle="{Binding CapacityStateText, StringFormat='{}Capacidad: {0}'}"
+                                          Margin="0,0,10,0"/>
+                    <components:MetricCard Title="ESTADO DEL NODO"
+                                          Value="{Binding NodeStatusText}"
+                                          Subtitle="{Binding ProcessorText, StringFormat='{}Acelerador: {0}'}"/>
+                </UniformGrid>
+
+                <!-- Section Title -->
+                <TextBlock Text="Supervisión de Cámaras"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource VisionTextPrimary}"
+                           Margin="0,4,0,12"/>
+
+                <!-- Empty State -->
+                <components:EmptyState Title="No hay cámaras disponibles"
+                                       Description="Agregue una cámara para comenzar a supervisar métricas y rendimiento."
+                                       Visibility="{Binding HasNoCameras, Converter={StaticResource BooleanToVisibility}}"
+                                       Margin="0,16,0,20"/>
+
+                <!-- Camera Metrics Grid -->
+                <ItemsControl ItemsSource="{Binding Cameras}"
+                              Visibility="{Binding HasCameras, Converter={StaticResource BooleanToVisibility}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="2"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource VisionCardBackground}"
+                                    BorderBrush="{DynamicResource VisionBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16"
+                                    Margin="0,0,12,12">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="12"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="14"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Card Header -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                            <TextBlock Text="{Binding SourceSummary}" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <components:StatusBadge Grid.Column="1" Text="{Binding Status}" Status="{Binding Status}"/>
+                                    </Grid>
+
+                                    <!-- Metrics Grid Details -->
+                                    <Border Grid.Row="2" Background="{DynamicResource VisionSurface}" CornerRadius="6" Padding="12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- FPS -->
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Rendimiento" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                <TextBlock Text="{Binding FramesPerSecond, StringFormat='{}{0:0.0} FPS'}" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource VisionAccent}" Margin="0,2,0,0"/>
+                                                <TextBlock Text="{Binding ActiveAnalyticsSummary}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+
+                                            <!-- Detections -->
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="Detecciones" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                <TextBlock Text="{Binding TotalDetectionsCount}" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,2,0,0"/>
+                                                <TextBlock Text="Total acumulado" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0"/>
+                                            </StackPanel>
+
+                                            <!-- Last Activity -->
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Última actividad" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                                <TextBlock Text="{Binding LastActivityText}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding ActiveRulesCount, StringFormat='{}{0} reglas activas'}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Actions Footer -->
+                                    <Grid Grid.Row="4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding OperationalResultsSummary}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <Button Grid.Column="1"
+                                                Content="Ver Métricas Detalladas →"
+                                                Command="{Binding DataContext.OpenCameraMetricsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                Padding="12,6"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"/>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 2. DETAIL: MÉTRICAS Y SUPERVISIÓN EN PROFUNDIDAD (EXACTAMENTE 1 STREAM EN VIVO) -->
+        <Grid Visibility="{Binding IsMetricsDetailOpen, Converter={StaticResource BooleanToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Detail Header Bar -->
+            <Border Grid.Row="0"
+                    Background="{DynamicResource VisionCardBackground}"
+                    BorderBrush="{DynamicResource VisionBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0"
+                            Content="← Volver a Supervisión General"
+                            Command="{Binding BackToMetricsOverviewCommand}"
+                            Padding="12,6"
+                            FontWeight="SemiBold"/>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Métricas" FontSize="13" Foreground="{DynamicResource VisionTextSecondary}" VerticalAlignment="Center"/>
+                        <TextBlock Text="  /  " FontSize="13" Foreground="{DynamicResource VisionBorder}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding SelectedMetricsCamera.Name}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource VisionTextPrimary}" VerticalAlignment="Center"/>
+                        <TextBlock Text=" — " FontSize="13" Foreground="{DynamicResource VisionBorder}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding SelectedMetricsCamera.SourceSummary}" FontSize="12" Foreground="{DynamicResource VisionTextSecondary}" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="3"
+                            Content="⚙ Configurar cámara"
+                            Command="{Binding DataContext.OpenCameraDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                            CommandParameter="{Binding SelectedMetricsCamera}"
+                            Padding="12,6"
+                            FontWeight="SemiBold"
+                            Background="{DynamicResource VisionSurface}"/>
+
+                    <components:StatusBadge Grid.Column="5"
+                                            Text="{Binding SelectedMetricsCamera.Status}"
+                                            Status="{Binding SelectedMetricsCamera.Status}"
+                                            VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Detail Workspace: Video Left (Stream activo) + Telemetría & Analíticas Right -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="14"/>
+                    <ColumnDefinition Width="420"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Column: Video Live Stream + Performance Box -->
+                <Grid Grid.Column="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Live Video Player (Único stream activo) -->
+                    <Border Grid.Row="0"
+                            Background="#0A0D10"
+                            BorderBrush="{DynamicResource VisionBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            ClipToBounds="True">
+                        <Grid>
+                            <!-- Placeholder -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Visibility="{Binding SelectedMetricsCamera.IsRunning, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                <TextBlock Text="📹" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8" Opacity="0.4"/>
+                                <TextBlock Text="Cámara en pausa / sin transmisión activa" Foreground="#667085" HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="Inicie la cámara desde Administración para visualizar la telemetría en tiempo real." Foreground="#475467" HorizontalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <!-- Live Video Image -->
+                            <Image Source="{Binding SelectedMetricsCamera.VideoImage}" Stretch="Uniform"/>
+
+                            <!-- Video Overlay Badge (Top Left) -->
+                            <Border Background="#D90F172A" BorderBrush="#22C55E" BorderThickness="1" CornerRadius="4" Padding="6,3" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10"
+                                    Visibility="{Binding SelectedMetricsCamera.IsRunning, Converter={StaticResource BooleanToVisibility}}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Width="6" Height="6" Fill="#22C55E" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="SUPERVISIÓN EN VIVO" FontSize="9" FontWeight="Bold" Foreground="#22C55E" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Live Telemetry Overlay Bar (Bottom) -->
+                            <Border Background="#E6090D14" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="0,1,0,0" Padding="12,6" VerticalAlignment="Bottom"
+                                    Visibility="{Binding SelectedMetricsCamera.IsRunning, Converter={StaticResource BooleanToVisibility}}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Pipeline: " FontSize="10" Foreground="#94A3B8"/>
+                                        <TextBlock Text="{Binding SelectedMetricsCamera.ActiveAnalyticsSummary}" FontSize="10" FontWeight="SemiBold" Foreground="#F8FAFC"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+                                        <TextBlock Text="FPS: " FontSize="10" Foreground="#94A3B8"/>
+                                        <TextBlock Text="{Binding SelectedMetricsCamera.FramesPerSecond, StringFormat='{}{0:0.0}'}" FontSize="10" FontWeight="Bold" Foreground="#38BDF8"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0">
+                                        <TextBlock Text="Detecciones: " FontSize="10" Foreground="#94A3B8"/>
+                                        <TextBlock Text="{Binding SelectedMetricsCamera.TotalDetectionsCount}" FontSize="10" FontWeight="Bold" Foreground="#34D399"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Technical Performance Summary Bar -->
+                    <Border Grid.Row="2"
+                            Background="{DynamicResource VisionCardBackground}"
+                            BorderBrush="{DynamicResource VisionBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Tasa de Procesamiento" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                <TextBlock Text="{Binding SelectedMetricsCamera.FramesPerSecond, StringFormat='{}{0:0.0} FPS'}" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource VisionAccent}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Reglas Evaluadas" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                <TextBlock Text="{Binding SelectedMetricsCamera.ActiveRulesCount, StringFormat='{}{0} activas'}" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Última Detección" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                <TextBlock Text="{Binding SelectedMetricsCamera.LastActivityText}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource VisionTextPrimary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Right Column: Desglose de Analíticas + Alertas + Historial de Eventos -->
+                <Grid Grid.Column="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 1. Desglose por Analítica Dinámico -->
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource VisionCardBackground}"
+                            BorderBrush="{DynamicResource VisionBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14">
+                        <StackPanel>
+                            <TextBlock Text="SOLUCIONES IA CONFIGURADAS"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       Margin="0,0,0,10"/>
+
+                            <!-- Empty state when no analytics configured -->
+                            <TextBlock Text="No hay Soluciones IA configuradas en esta cámara."
+                                       FontSize="11"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       Visibility="{Binding SelectedMetricsCamera.HasNoConfiguredAnalyticsMetrics, Converter={StaticResource BooleanToVisibility}}"/>
+
+                            <!-- Dynamic items for configured analytics only -->
+                            <ItemsControl ItemsSource="{Binding SelectedMetricsCamera.ConfiguredAnalyticsMetrics}"
+                                          Visibility="{Binding SelectedMetricsCamera.HasConfiguredAnalyticsMetrics, Converter={StaticResource BooleanToVisibility}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{DynamicResource VisionBorder}" BorderThickness="0,0,0,1" Padding="0,6">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <Grid Grid.Row="0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="6"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="12" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource VisionTextPrimary}" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="3" Text="{Binding EventsCount, StringFormat='{}{0} eventos'}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource VisionAccent}" VerticalAlignment="Center"/>
+                                                </Grid>
+                                                <Grid Grid.Row="1" Margin="0,3,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding LastEventText}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding StatusText}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" Margin="6,0,0,0"/>
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 2. Alertas Generadas por Reglas -->
+                    <Border Grid.Row="2"
+                            Background="{DynamicResource VisionCardBackground}"
+                            BorderBrush="{DynamicResource VisionBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="8"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="ALERTAS OPERATIVAS (REGLAS)"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource VisionTextSecondary}"
+                                           VerticalAlignment="Center"/>
+                                <Border Grid.Column="1"
+                                        Background="{DynamicResource VisionSurface}"
+                                        CornerRadius="4"
+                                        Padding="6,2"
+                                        Visibility="{Binding SelectedMetricsCamera.HasCameraAlerts, Converter={StaticResource BooleanToVisibility}}">
+                                    <TextBlock Text="{Binding SelectedMetricsCamera.OpenAlertsCount, StringFormat='{}{0} activas'}"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource VisionAccent}"/>
+                                </Border>
+                            </Grid>
+
+                            <!-- Empty alerts -->
+                            <TextBlock Grid.Row="2"
+                                       Text="Sin alertas generadas en esta cámara."
+                                       FontSize="11"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding SelectedMetricsCamera.HasNoCameraAlerts, Converter={StaticResource BooleanToVisibility}}"/>
+
+                            <!-- Alerts Scroll -->
+                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                          Visibility="{Binding SelectedMetricsCamera.HasCameraAlerts, Converter={StaticResource BooleanToVisibility}}">
+                                <ItemsControl ItemsSource="{Binding SelectedMetricsCamera.CameraAlerts}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{DynamicResource VisionBorder}" BorderThickness="0,0,0,1" Padding="0,6">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <Grid Grid.Row="0">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="6"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <Border Grid.Column="0" Background="{Binding SeverityBadgeBrush}" CornerRadius="3" Padding="4,1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding SeverityText}" FontSize="8" FontWeight="Bold" Foreground="#FFFFFF"/>
+                                                        </Border>
+                                                        <TextBlock Grid.Column="2" Text="{Binding Title}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource VisionTextPrimary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="3" Text="{Binding CreatedAtFormatted}" FontSize="9" Foreground="{DynamicResource VisionTextSecondary}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                                    </Grid>
+                                                    <TextBlock Grid.Row="1" Text="{Binding Description}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <!-- 3. Historial de Actividad y Eventos -->
+                    <Border Grid.Row="4"
+                            Background="{DynamicResource VisionCardBackground}"
+                            BorderBrush="{DynamicResource VisionBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="8"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="HISTORIAL RECIENTE DE EVENTOS"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource VisionTextSecondary}"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding SelectedMetricsCamera.Events.Count, StringFormat='{}{0} registrados'}"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource VisionTextSecondary}"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Empty events -->
+                            <TextBlock Grid.Row="2"
+                                       Text="No se han registrado eventos recientes para esta cámara."
+                                       FontSize="11"
+                                       Foreground="{DynamicResource VisionTextSecondary}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding SelectedMetricsCamera.HasNoEvents, Converter={StaticResource BooleanToVisibility}}"/>
+
+                            <!-- Events Scroll -->
+                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                          Visibility="{Binding SelectedMetricsCamera.HasEvents, Converter={StaticResource BooleanToVisibility}}">
+                                <ItemsControl ItemsSource="{Binding SelectedMetricsCamera.Events}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{DynamicResource VisionBorder}" BorderThickness="0,0,0,1" Padding="0,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource VisionTextPrimary}" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding Description}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1" Text="{Binding TimestampText}" FontSize="10" Foreground="{DynamicResource VisionTextSecondary}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

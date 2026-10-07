@@ -73,7 +73,17 @@ public sealed class RuleEngine : IRuleEngine
                 !string.IsNullOrWhiteSpace(ev.AnalyticInstanceId) &&
                 !string.Equals(rule.AnalyticInstanceId, ev.AnalyticInstanceId, StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                // Fallback: If one is legacy_hand_raise or default and event type belongs to the same analytic family
+                var isLegacyMatch = (string.Equals(rule.AnalyticInstanceId, "legacy_hand_raise", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(ev.AnalyticInstanceId, "legacy_hand_raise", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(rule.AnalyticInstanceId, "hand_raise_default", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(ev.AnalyticInstanceId, "hand_raise_default", StringComparison.OrdinalIgnoreCase)) &&
+                                    (string.Equals(ev.AnalyticType, "hand_raise", StringComparison.OrdinalIgnoreCase) ||
+                                     ev.EventType.StartsWith("hand_", StringComparison.OrdinalIgnoreCase));
+                if (!isLegacyMatch)
+                {
+                    continue;
+                }
             }
 
             // EventType filter

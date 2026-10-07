@@ -24,7 +24,24 @@ public sealed class EventItemViewModel
     public string Hand { get; }
     public string Zone { get; }
     public BitmapSource? Thumbnail { get; }
-    public string Title => Type == "hand_raised" ? "Mano levantada" : "Mano bajada";
+    public bool HasThumbnail => Thumbnail != null;
+    public string RawEventType => Type;
+    public string TimestampText => $"{Timestamp:HH:mm:ss}";
+    public string Description => $"{Title} ({Zone})";
+    public string ZoneName => Zone;
+    public string Title => Type switch
+    {
+        "hand_raised" => "Mano levantada detectada",
+        "hand_lowered" => "Mano bajada",
+        "person_presence_started" => "Persona detectada",
+        "person_presence_ended" => "Persona retirada",
+        "zone_intrusion_started" => "Intrusión en zona",
+        "zone_intrusion_ended" => "Fin de intrusión",
+        "line_crossed" => "Cruce de línea",
+        "person_count_updated" => "Actualización de conteo",
+        "occupancy_threshold_reached" => "Límite de aforo alcanzado",
+        _ => Type.Replace('_', ' ')
+    };
     public string Detail => $"{Timestamp:dd/MM HH:mm:ss} · {CameraId} · {Hand} · {Zone}";
 
     public static EventItemViewModel Create(HandEvent handEvent, string snapshotRoot)

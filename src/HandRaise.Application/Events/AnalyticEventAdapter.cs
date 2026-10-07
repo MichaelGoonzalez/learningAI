@@ -14,6 +14,20 @@ public static class AnalyticEventAdapter
             hand = value?.ToString() ?? "unknown";
         }
 
+        var metadata = genericEvent.Metadata != null
+            ? new Dictionary<string, object?>(genericEvent.Metadata)
+            : new Dictionary<string, object?>();
+
+        if (!string.IsNullOrWhiteSpace(genericEvent.AnalyticInstanceId))
+        {
+            metadata["analytic_instance_id"] = genericEvent.AnalyticInstanceId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(genericEvent.AnalyticType))
+        {
+            metadata["analytic_type"] = genericEvent.AnalyticType;
+        }
+
         return new HandEvent(
             Id: genericEvent.Id,
             Type: genericEvent.EventType,
@@ -26,13 +40,13 @@ public static class AnalyticEventAdapter
             SnapshotUrl: genericEvent.SnapshotUrl,
             NodeId: genericEvent.NodeId,
             SiteId: genericEvent.SiteId,
-            Metadata: genericEvent.Metadata)
+            Metadata: metadata)
         {
             SnapshotJpeg = genericEvent.SnapshotJpeg
         };
     }
 
-    public static AnalyticEvent FromLegacyHandEvent(HandEvent handEvent, string analyticInstanceId = "legacy_hand_raise")
+    public static AnalyticEvent FromLegacyHandEvent(HandEvent handEvent, string? analyticInstanceId = null)
     {
         ArgumentNullException.ThrowIfNull(handEvent);
 
@@ -45,11 +59,30 @@ public static class AnalyticEventAdapter
             metadata["hand"] = handEvent.Hand;
         }
 
+        var instanceId = analyticInstanceId;
+        if (string.IsNullOrWhiteSpace(instanceId))
+        {
+            if (metadata.TryGetValue("analytic_instance_id", out var instVal) && instVal != null)
+            {
+                instanceId = instVal.ToString();
+            }
+        }
+        if (string.IsNullOrWhiteSpace(instanceId))
+        {
+            instanceId = "legacy_hand_raise";
+        }
+
+        var analyticType = "hand_raise";
+        if (metadata.TryGetValue("analytic_type", out var typeVal) && typeVal != null && !string.IsNullOrWhiteSpace(typeVal.ToString()))
+        {
+            analyticType = typeVal.ToString()!;
+        }
+
         return new AnalyticEvent(
             Id: handEvent.Id,
             CameraId: handEvent.CameraId,
-            AnalyticInstanceId: analyticInstanceId,
-            AnalyticType: "hand_raise",
+            AnalyticInstanceId: instanceId!,
+            AnalyticType: analyticType,
             EventType: handEvent.Type,
             TimestampUtc: handEvent.Timestamp,
             TrackId: handEvent.TrackId,

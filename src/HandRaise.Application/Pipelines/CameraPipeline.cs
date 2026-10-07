@@ -37,6 +37,7 @@ public sealed class CameraPipeline
     private readonly IPersonSnapshotEncoder? _snapshotEncoder;
     private readonly SnapshotEncodingOptions? _snapshotOptions;
     private readonly Action<string>? _log;
+    private readonly double _targetInferenceFps;
 
     public IReadOnlyList<IAnalyticEvaluator> Evaluators => _evaluatorProvider?.GetEvaluators() ?? _evaluators;
 
@@ -60,7 +61,8 @@ public sealed class CameraPipeline
         IReadOnlyList<IAnalyticEvaluator>? evaluators = null,
         IAnalyticEvaluatorProvider? evaluatorProvider = null,
         ILineProvider? lineProvider = null,
-        IReadOnlyList<LineDefinition>? lines = null)
+        IReadOnlyList<LineDefinition>? lines = null,
+        double targetInferenceFps = 0)
     {
         _cameraId = cameraId;
         _source = source;
@@ -75,6 +77,7 @@ public sealed class CameraPipeline
         _rawSink = rawSink;
         _tracker = tracker;
         _evaluatorProvider = evaluatorProvider;
+        _targetInferenceFps = targetInferenceFps;
 
         if (evaluators != null)
         {
@@ -86,7 +89,7 @@ public sealed class CameraPipeline
         }
         else
         {
-            _evaluators = [new HandRaiseAnalyticEvaluator(detectionOptions)];
+            _evaluators = [];
         }
 
         _eventPublisher = eventPublisher;
@@ -102,6 +105,16 @@ public sealed class CameraPipeline
     {
         var started = Stopwatch.GetTimestamp();
         long processed = 0;
+        long inferenceCount = 0;
+        long inferenceDroppedCount = 0;
+        var inferenceStarted = Stopwatch.GetTimestamp();
+        double lastInferenceTimestamp = -1;
+        PoseBatch? lastPose = null;
+        IReadOnlyList<EvaluatedPerson> lastOverlayPeople = [];
+        double lastEvalDurationMs = 0;
+        int lastEvaluatorErrors = 0;
+        var minInferenceIntervalMs = _targetInferenceFps > 0 ? 1000.0 / _targetInferenceFps : 0.0;
+
         var sourceGeneration = (_source as IConnectionGenerationSource)?.ConnectionGeneration ?? 0;
         var backendGeneration = _backendGeneration?.Invoke() ?? 0;
 
@@ -138,91 +151,157 @@ public sealed class CameraPipeline
                 }
 
                 var frameStarted = Stopwatch.GetTimestamp();
-
-                // 1. Single inference execution per frame
-                var pose = await _backend.InferAsync(captured.AsImageFrame(), cancellationToken);
-
-                // 2. Single tracking update per frame
-                var tracked = _tracker.Update(pose.People, captured.TimestampMilliseconds);
                 var zones = _zoneProvider?.GetZones(captured.Width, captured.Height) ?? _zones;
                 var lines = _lineProvider?.GetLines(_cameraId) ?? _lines;
+                var activeEvaluators = currentEvaluators.Where(e => e.IsEnabled).ToList();
 
-                // 3. Build generic shared context
-                var context = new AnalyticFrameContext(
-                    _cameraId,
-                    captured.TimestampMilliseconds,
-                    captured.TimestampUtc,
-                    captured.Width,
-                    captured.Height,
-                    tracked,
-                    zones,
-                    lines);
-
-                // 4. Dispatch to all active evaluators with fault isolation
-                var allPeople = new List<EvaluatedPerson>();
-                var allLegacyEvents = new List<HandEvent>();
-                var evalStart = Stopwatch.GetTimestamp();
-                var evaluatorErrors = 0;
-                var activeEvaluatorCount = 0;
-
-                foreach (var evaluator in currentEvaluators)
+                if (activeEvaluators.Count == 0)
                 {
-                    if (!evaluator.IsEnabled) continue;
-                    activeEvaluatorCount++;
+                    processed++;
+                    var elapsedSecs = Stopwatch.GetElapsedTime(started).TotalSeconds;
+                    var currentFps = elapsedSecs > 0 ? processed / elapsedSecs : 0;
+                    var preliminaryTotalMs = Stopwatch.GetElapsedTime(frameStarted).TotalMilliseconds;
+                    var beforeOverlayPass = Stopwatch.GetTimestamp();
 
-                    try
-                    {
-                        var evalResult = evaluator.Evaluate(context);
-                        if (evalResult.People.Count > 0)
-                        {
-                            allPeople.AddRange(evalResult.People);
-                        }
-                        if (evalResult.LegacyEvents.Count > 0)
-                        {
-                            allLegacyEvents.AddRange(evalResult.LegacyEvents);
-                        }
-                        else if (evalResult.Events.Count > 0)
-                        {
-                            // Adapt generic events to legacy if not explicitly populated
-                            foreach (var genericEvent in evalResult.Events)
-                            {
-                                var legacyEvent = AnalyticEventAdapter.ToLegacyHandEvent(genericEvent);
-                                if (genericEvent.Metadata != null &&
-                                    genericEvent.Metadata.TryGetValue("emit_snapshot", out var emitSnap) &&
-                                    emitSnap is false or (object)false)
-                                {
-                                    legacyEvent = legacyEvent with { SnapshotJpeg = [] };
-                                }
-                                allLegacyEvents.Add(legacyEvent);
-                            }
-                        }
-                    }
-                    catch (Exception exception)
-                    {
-                        evaluatorErrors++;
-                        _log?.Invoke($"Error en evaluador '{evaluator.AnalyticTypeId}' (Instancia: '{evaluator.InstanceId}') en cámara '{_cameraId}': {exception.Message}");
-                    }
+                    var cleanAnnotated = zones.Count > 0
+                        ? _overlay.Draw(captured, [], zones, new OverlayStatistics(currentFps, preliminaryTotalMs, string.Empty, string.Empty, string.Empty))
+                        : captured.Clone();
+
+                    var overlayTimeSpan = Stopwatch.GetElapsedTime(beforeOverlayPass);
+                    var totalTimeSpan = Stopwatch.GetElapsedTime(frameStarted);
+                    var frameAge = Stopwatch.GetElapsedTime(captured.AcquiredAtStopwatchTicks).TotalMilliseconds;
+
+                    var zeroMetrics = new CameraPipelineMetrics(
+                        processed,
+                        _source.DroppedFrames,
+                        currentFps,
+                        captured.DecodeMilliseconds,
+                        frameAge,
+                        PreprocessMilliseconds: 0,
+                        InferenceMilliseconds: 0,
+                        PostprocessMilliseconds: 0,
+                        OverlayMilliseconds: overlayTimeSpan.TotalMilliseconds,
+                        TotalMilliseconds: totalTimeSpan.TotalMilliseconds,
+                        AnalyticDurationMilliseconds: 0,
+                        EvaluatorErrors: 0,
+                        ActiveAnalyticCount: 0,
+                        InferenceFps: 0,
+                        DroppedInferenceFrames: 0);
+
+                    yield return new ProcessedCameraFrame(
+                        _cameraId, cleanAnnotated, [], [], zeroMetrics);
+                    continue;
                 }
 
-                var evalDurationMs = Stopwatch.GetElapsedTime(evalStart).TotalMilliseconds;
+                var shouldInfer = lastInferenceTimestamp < 0 ||
+                    minInferenceIntervalMs <= 0 ||
+                    (captured.TimestampMilliseconds - lastInferenceTimestamp) >= minInferenceIntervalMs;
 
-                // Deduplicate people by TrackId/Detection for overlay rendering if multiple evaluators return people
-                var overlayPeople = DeduplicatePeople(allPeople, tracked);
+                PoseBatch pose;
+                IReadOnlyList<EvaluatedPerson> overlayPeople;
+                IReadOnlyList<HandEvent> emittedEvents;
+                double evalDurationMs;
+                int evaluatorErrors;
+                var activeEvaluatorCount = activeEvaluators.Count;
 
-                var emittedEvents = allLegacyEvents.Select(handEvent =>
-                    AddSnapshot(handEvent, overlayPeople, captured)).ToArray();
-
-                if (_eventPublisher is not null)
+                if (shouldInfer)
                 {
-                    foreach (var handEvent in emittedEvents)
+                    lastInferenceTimestamp = captured.TimestampMilliseconds;
+                    inferenceCount++;
+
+                    // 1. Single inference execution per frame (only when active evaluators exist)
+                    pose = await _backend.InferAsync(captured.AsImageFrame(), cancellationToken);
+                    lastPose = pose;
+
+                    // 2. Single tracking update per frame
+                    var tracked = _tracker.Update(pose.People, captured.TimestampMilliseconds);
+
+                    // 3. Build generic shared context
+                    var context = new AnalyticFrameContext(
+                        _cameraId,
+                        captured.TimestampMilliseconds,
+                        captured.TimestampUtc,
+                        captured.Width,
+                        captured.Height,
+                        tracked,
+                        zones,
+                        lines);
+
+                    // 4. Dispatch to all active evaluators with fault isolation
+                    var allPeople = new List<EvaluatedPerson>();
+                    var allLegacyEvents = new List<HandEvent>();
+                    var evalStart = Stopwatch.GetTimestamp();
+                    evaluatorErrors = 0;
+
+                    foreach (var evaluator in activeEvaluators)
                     {
-                        await _eventPublisher.PublishAsync(handEvent, cancellationToken);
+                        try
+                        {
+                            var evalResult = evaluator.Evaluate(context);
+                            if (evalResult.People.Count > 0)
+                            {
+                                allPeople.AddRange(evalResult.People);
+                            }
+                            if (evalResult.LegacyEvents.Count > 0)
+                            {
+                                allLegacyEvents.AddRange(evalResult.LegacyEvents);
+                            }
+                            else if (evalResult.Events.Count > 0)
+                            {
+                                foreach (var genericEvent in evalResult.Events)
+                                {
+                                    var legacyEvent = AnalyticEventAdapter.ToLegacyHandEvent(genericEvent);
+                                    if (genericEvent.Metadata != null &&
+                                        genericEvent.Metadata.TryGetValue("emit_snapshot", out var emitSnap) &&
+                                        emitSnap is false or (object)false)
+                                    {
+                                        legacyEvent = legacyEvent with { SnapshotJpeg = [] };
+                                    }
+                                    allLegacyEvents.Add(legacyEvent);
+                                }
+                            }
+                        }
+                        catch (Exception exception)
+                        {
+                            evaluatorErrors++;
+                            _log?.Invoke($"Error en evaluador '{evaluator.AnalyticTypeId}' (Instancia: '{evaluator.InstanceId}') en cámara '{_cameraId}': {exception.Message}");
+                        }
                     }
+
+                    evalDurationMs = Stopwatch.GetElapsedTime(evalStart).TotalMilliseconds;
+                    lastEvalDurationMs = evalDurationMs;
+                    lastEvaluatorErrors = evaluatorErrors;
+
+                    // Deduplicate people by TrackId/Detection for overlay rendering
+                    overlayPeople = DeduplicatePeople(allPeople, tracked);
+                    lastOverlayPeople = overlayPeople;
+
+                    emittedEvents = allLegacyEvents.Select(handEvent =>
+                        AddSnapshot(handEvent, overlayPeople, captured)).ToArray();
+
+                    if (_eventPublisher is not null)
+                    {
+                        foreach (var handEvent in emittedEvents)
+                        {
+                            await _eventPublisher.PublishAsync(handEvent, cancellationToken);
+                        }
+                    }
+                }
+                else
+                {
+                    inferenceDroppedCount++;
+                    pose = lastPose ?? new PoseBatch([], TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
+                    overlayPeople = lastOverlayPeople;
+                    emittedEvents = [];
+                    evalDurationMs = lastEvalDurationMs;
+                    evaluatorErrors = lastEvaluatorErrors;
                 }
 
                 processed++;
                 var elapsedSeconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
                 var fps = elapsedSeconds > 0 ? processed / elapsedSeconds : 0;
+                var inferenceElapsedSecs = Stopwatch.GetElapsedTime(inferenceStarted).TotalSeconds;
+                var inferenceFps = inferenceElapsedSecs > 0 ? inferenceCount / inferenceElapsedSecs : 0;
                 var beforeOverlay = Stopwatch.GetTimestamp();
                 var preliminaryTotal = Stopwatch.GetElapsedTime(frameStarted).TotalMilliseconds;
 
@@ -251,7 +330,9 @@ public sealed class CameraPipeline
                     totalTime.TotalMilliseconds,
                     AnalyticDurationMilliseconds: evalDurationMs,
                     EvaluatorErrors: evaluatorErrors,
-                    ActiveAnalyticCount: activeEvaluatorCount);
+                    ActiveAnalyticCount: activeEvaluatorCount,
+                    InferenceFps: inferenceFps,
+                    DroppedInferenceFrames: inferenceDroppedCount);
 
                 yield return new ProcessedCameraFrame(
                     _cameraId, annotated, overlayPeople, emittedEvents, metrics);

@@ -1,4 +1,4 @@
-HAND RAISE DETECTION - AVISOS DE TERCEROS
+VISIONCONTROL EDGE - AVISOS DE TERCEROS
 
 Modelo yolo26n-pose.onnx
 Licencia: AGPL-3.0. Origen: https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-pose.pt

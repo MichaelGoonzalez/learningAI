@@ -221,7 +221,7 @@ El nodo Edge valida y responde con los encabezados CORS correspondientes para lo
 | HandRaise Solution C# Tests | **374/374 SUPERADOS** | 100% verde (Domain, Application, Windows Infra, Host, Desktop) |
 | React Test Suite | **224/224 SUPERADOS** | 100% verde (Contratos R8, R9, R10, R11) |
 | React TypeScript & Vite Build | **0 ERRORES** | Build exitoso y limpio |
-| Publicación Standalone | **VALIDADO** | `dist\HandRaise\VisionControl.Edge.exe` operativo |
+| Publicación Standalone | **VALIDADO** | `dist\VisionControl.Edge\VisionControl.Edge.exe` operativo |
 | DirectML Hardware Probe | **VALIDADO** | RTX 2050 (3962 MB), Radeon Graphics y CPU |
 | Prospección de Archivo Local | **VALIDADO** | `.local-test/bus.mp4` probado con resolución y FPS reales |
 | Prospección de Cámara USB | **VALIDADO** | Enumerador WinRT con fallback seguro a índice 0 |

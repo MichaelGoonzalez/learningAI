@@ -1,0 +1,209 @@
+<UserControl x:Class="HandRaise.Desktop.Views.CameraSpacesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:HandRaise.Desktop.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="360"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: Video Canvas Editor (70% viewport) -->
+        <Border Grid.Column="0"
+                Background="#080A0D"
+                BorderBrush="{DynamicResource VisionBorder}"
+                BorderThickness="1"
+                CornerRadius="8"
+                ClipToBounds="True">
+            <Grid>
+                <Image Source="{Binding VideoImage}" Stretch="Uniform"/>
+                <!-- Zone & Lines editor overlay instruction -->
+                <TextBlock Text="Modo edición de espacios activo. Haga clic sobre la imagen para añadir puntos."
+                           FontSize="11"
+                           Foreground="#FFFFFF"
+                           Background="#CC0A0D10"
+                           Padding="10,6"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Top"
+                           Margin="0,10,0,0"
+                           Visibility="{Binding IsEditingZones, Converter={StaticResource BooleanToVisibility}}"/>
+            </Grid>
+        </Border>
+
+        <!-- Right: Zones & Lines Configuration Panel -->
+        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,0,16">
+                <!-- CONTEXTUAL MODE: CREATING ZONE FOR AI WIZARD -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionAccent}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Margin="0,0,0,16"
+                        Visibility="{Binding IsCreatingContextualZone, Converter={StaticResource BooleanToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="CREANDO ZONA PARA SOLUCIÓN IA"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionAccent}"
+                                   Margin="0,0,0,4"/>
+                        <TextBlock Text="Haga clic sobre el video para marcar al menos 3 vértices del polígono deseado."
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Nombre de la zona:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding ZoneName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" Padding="6"/>
+
+                        <TextBlock Text="{Binding ZoneMessage}" FontSize="11" Foreground="{DynamicResource VisionWarning}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                        <StackPanel Margin="0,4,0,0">
+                            <Button Content="Guardar zona y volver a IA"
+                                    Command="{Binding SaveContextualZoneAndReturnCommand}"
+                                    Padding="14,7"
+                                    FontWeight="Bold"
+                                    Margin="0,0,0,8"/>
+
+                            <Button Content="Cancelar y volver a IA"
+                                    Command="{Binding CancelContextualGeometryAndReturnCommand}"
+                                    Background="{DynamicResource VisionSurface}"
+                                    Padding="12,6"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- CONTEXTUAL MODE: CREATING LINE FOR AI WIZARD -->
+                <Border Background="{DynamicResource VisionCardBackground}"
+                        BorderBrush="{DynamicResource VisionAccent}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Margin="0,0,0,16"
+                        Visibility="{Binding IsCreatingContextualLine, Converter={StaticResource BooleanToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="CREANDO LÍNEA VIRTUAL PARA SOLUCIÓN IA"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource VisionAccent}"
+                                   Margin="0,0,0,4"/>
+                        <TextBlock Text="Configure el identificador y el sentido de conteo/cruce de la línea virtual."
+                                   FontSize="12"
+                                   Foreground="{DynamicResource VisionTextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Nombre de la línea:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding NewLineName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" Padding="6"/>
+
+                        <TextBlock Text="Sentido de detección:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                        <ComboBox ItemsSource="{Binding LineDirectionOptions}"
+                                  SelectedItem="{Binding SelectedLineDirectionText}"
+                                  Margin="0,0,0,12"/>
+
+                        <TextBlock Text="{Binding LineMessage}" FontSize="11" Foreground="{DynamicResource VisionWarning}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                        <StackPanel Margin="0,4,0,0">
+                            <Button Content="Guardar línea y volver a IA"
+                                    Command="{Binding SaveContextualLineAndReturnCommand}"
+                                    Padding="14,7"
+                                    FontWeight="Bold"
+                                    Margin="0,0,0,8"/>
+
+                            <Button Content="Cancelar y volver a IA"
+                                    Command="{Binding CancelContextualGeometryAndReturnCommand}"
+                                    Background="{DynamicResource VisionSurface}"
+                                    Padding="12,6"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- STANDARD ZONES PANEL (Visible when not in contextual line mode) -->
+                <StackPanel Visibility="{Binding IsCreatingContextualLine, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}">
+                    <!-- Zonas Poligonales -->
+                    <TextBlock Text="Zonas Poligonales"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource VisionTextPrimary}"
+                               Margin="0,0,0,8"/>
+
+                    <Border Background="{DynamicResource VisionCardBackground}"
+                            BorderBrush="{DynamicResource VisionBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14"
+                            Margin="0,0,0,16">
+                        <StackPanel>
+                            <components:EmptyState Title="Sin zonas delimitadas"
+                                                   Description="Cree una zona poligonal para delimitar áreas de interés analítico."
+                                                   Visibility="{Binding HasNoZones, Converter={StaticResource BooleanToVisibility}}"
+                                                   Margin="0,0,0,10"/>
+
+                            <Button Content="{Binding ZoneEditorButtonText}"
+                                    Command="{Binding ToggleZoneEditorCommand}"
+                                    Margin="0,0,0,10"
+                                    Padding="12,6"/>
+
+                            <StackPanel Visibility="{Binding IsEditingZones, Converter={StaticResource BooleanToVisibility}}">
+                                <TextBlock Text="Nombre de la zona:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding ZoneName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" Padding="6"/>
+
+                                <UniformGrid Columns="3" Margin="0,0,0,8">
+                                    <Button Content="Cerrar" Command="{Binding CloseZoneCommand}" Margin="0,0,4,0" Padding="6,4"/>
+                                    <Button Content="Deshacer" Command="{Binding UndoZoneCommand}" Margin="0,0,4,0" Padding="6,4"/>
+                                    <Button Content="Borrar" Command="{Binding DeleteZoneCommand}" Padding="6,4"/>
+                                </UniformGrid>
+
+                                <TextBlock Text="{Binding ZoneMessage}" FontSize="11" Foreground="{DynamicResource VisionAccent}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- STANDARD LINES PANEL (Visible when not in contextual zone mode) -->
+                <StackPanel Visibility="{Binding IsCreatingContextualZone, Converter={StaticResource BooleanToVisibility}, ConverterParameter=inverse}">
+                    <!-- Líneas de Cruce (Tripwires) -->
+                    <TextBlock Text="Líneas de Cruce (Tripwires)"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource VisionTextPrimary}"
+                               Margin="0,0,0,8"/>
+
+                    <Border Background="{DynamicResource VisionCardBackground}"
+                            BorderBrush="{DynamicResource VisionBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14">
+                        <StackPanel>
+                            <components:EmptyState Title="Sin líneas de cruce"
+                                                   Description="Configure líneas virtuales para contar personas o detectar ingresos/egresos."
+                                                   Visibility="{Binding HasNoLines, Converter={StaticResource BooleanToVisibility}}"
+                                                   Margin="0,0,0,10"/>
+
+                            <TextBlock Text="Nombre de línea:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding NewLineName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6"/>
+
+                            <TextBlock Text="Sentido de detección:" FontSize="11" Foreground="{DynamicResource VisionTextSecondary}" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding LineDirectionOptions}"
+                                      SelectedItem="{Binding SelectedLineDirectionText}"
+                                      Margin="0,0,0,10"/>
+
+                            <Button Content="+ Crear Línea de Cruce"
+                                    Command="{Binding AddLineCommand}"
+                                    Padding="12,6"
+                                    Margin="0,0,0,8"/>
+
+                            <TextBlock Text="{Binding LineMessage}" FontSize="11" Foreground="{DynamicResource VisionAccent}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
+

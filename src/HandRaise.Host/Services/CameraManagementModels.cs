@@ -49,6 +49,19 @@ public sealed record CameraStreamSubscriptionResult(
     IAsyncDisposable? Subscription = null,
     string? Error = null);
 
+public sealed record CameraProbeFrame(
+    byte[] Jpeg,
+    int Width,
+    int Height,
+    double FramesPerSecond,
+    double LatencyMilliseconds);
+
+public sealed record CameraProbeSubscriptionResult(
+    CameraStreamStatus Status,
+    ChannelReader<CameraProbeFrame>? Reader = null,
+    IAsyncDisposable? Subscription = null,
+    string? Error = null);
+
 public interface ICameraManagementService
 {
     Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default);
@@ -59,6 +72,8 @@ public interface ICameraManagementService
     Task<CameraView?> StartAsync(string id, CancellationToken token = default);
     Task<CameraView?> StopAsync(string id, CancellationToken token = default);
     Task<CameraTestResult> TestAsync(CameraTestRequest request, CancellationToken token = default);
+    Task<CameraProbeSubscriptionResult> ProbeStreamAsync(CameraTestRequest request, double targetFps = 15.0, int quality = 70, CancellationToken token = default) =>
+        Task.FromResult(new CameraProbeSubscriptionResult(CameraStreamStatus.Offline, Error: "No implementado."));
     Task<byte[]?> GetSnapshotAsync(string id, CancellationToken token = default);
     Task<IReadOnlyList<NormalizedZone>?> GetZonesAsync(string id, CancellationToken token = default);
     Task<bool> UpdateZonesAsync(string id, IReadOnlyList<NormalizedZone> zones, CancellationToken token = default);
@@ -95,6 +110,8 @@ internal sealed class DisabledCameraManagementService : ICameraManagementService
     public Task<CameraView?> StartAsync(string id, CancellationToken token = default) => throw Disabled();
     public Task<CameraView?> StopAsync(string id, CancellationToken token = default) => throw Disabled();
     public Task<CameraTestResult> TestAsync(CameraTestRequest request, CancellationToken token = default) => throw Disabled();
+    public Task<CameraProbeSubscriptionResult> ProbeStreamAsync(CameraTestRequest request, double targetFps = 15.0, int quality = 70, CancellationToken token = default) =>
+        Task.FromResult(new CameraProbeSubscriptionResult(CameraStreamStatus.Offline, Error: "La gestión de cámaras está deshabilitada en este host."));
     public Task<byte[]?> GetSnapshotAsync(string id, CancellationToken token = default) => Task.FromResult<byte[]?>(null);
     public Task<IReadOnlyList<NormalizedZone>?> GetZonesAsync(string id, CancellationToken token = default) => Task.FromResult<IReadOnlyList<NormalizedZone>?>(null);
     public Task<bool> UpdateZonesAsync(string id, IReadOnlyList<NormalizedZone> zones, CancellationToken token = default) => throw Disabled();

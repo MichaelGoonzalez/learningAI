@@ -20,6 +20,7 @@ public sealed class PersonCountingAnalyticEvaluator : IAnalyticEvaluator
 
     public string AnalyticTypeId => "person_counting";
     public string InstanceId => _instanceId;
+    public bool IsEnabled { get; set; } = true;
 
     public int CurrentOccupancy => _currentOccupancy;
     public int Entries => _entries;
@@ -48,7 +49,7 @@ public sealed class PersonCountingAnalyticEvaluator : IAnalyticEvaluator
 
     public AnalyticEvaluationResult Evaluate(AnalyticFrameContext context)
     {
-        if (context.TrackingUpdate.People.Count == 0 || context.Lines.Count == 0)
+        if (!IsEnabled || context.TrackingUpdate.People.Count == 0 || context.Lines.Count == 0)
         {
             return AnalyticEvaluationResult.Empty;
         }

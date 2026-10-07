@@ -252,6 +252,109 @@ public sealed class HeadlessEngineService(
         }
     }
 
+    public async Task<CameraProbeSubscriptionResult> ProbeStreamAsync(
+        CameraTestRequest request, double targetFps = 15.0, int quality = 70, CancellationToken token = default)
+    {
+        await Ready(token);
+        var started = Stopwatch.GetTimestamp();
+        var (source, credentials) = CameraSource.Sanitize(request.Source, request.Username, request.Password);
+        IVideoSource? video = null;
+        try
+        {
+            video = CreateSource(new("probe", "probe", source, false, false, []), credentials);
+        }
+        catch (Exception ex)
+        {
+            return new(CameraStreamStatus.Offline, Error: RollingErrorLog.Sanitize(ex.Message));
+        }
+
+        var channel = Channel.CreateBounded<CameraProbeFrame>(new BoundedChannelOptions(2)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleWriter = true,
+            SingleReader = true
+        });
+
+        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, _hostToken);
+        var clampedFps = Math.Clamp(targetFps, 1.0, 30.0);
+        var intervalTicks = (long)(Stopwatch.Frequency / clampedFps);
+
+        var pumpTask = Task.Run(async () =>
+        {
+            var lastSentTicks = 0L;
+            var frameCount = 0;
+            var fpsStopwatch = Stopwatch.StartNew();
+            var measuredFps = 0.0;
+
+            try
+            {
+                await foreach (var frame in video.ReadAllAsync(linkedCts.Token))
+                {
+                    using (frame)
+                    {
+                        frameCount++;
+                        if (fpsStopwatch.ElapsedMilliseconds >= 1000)
+                        {
+                            measuredFps = frameCount * 1000.0 / fpsStopwatch.ElapsedMilliseconds;
+                            frameCount = 0;
+                            fpsStopwatch.Restart();
+                        }
+
+                        var nowTicks = Stopwatch.GetTimestamp();
+                        if (nowTicks - lastSentTicks < intervalTicks)
+                        {
+                            continue;
+                        }
+                        lastSentTicks = nowTicks;
+
+                        byte[]? jpeg = null;
+                        try
+                        {
+                            jpeg = OpenCvFrameJpegEncoder.Encode(frame, quality);
+                        }
+                        catch
+                        {
+                            continue;
+                        }
+
+                        if (jpeg is not null)
+                        {
+                            var latency = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                            var fpsToReport = measuredFps > 0 ? measuredFps : (video.FramesPerSecond > 0 ? video.FramesPerSecond : clampedFps);
+                            channel.Writer.TryWrite(new CameraProbeFrame(
+                                jpeg,
+                                frame.Width,
+                                frame.Height,
+                                Math.Round(fpsToReport, 1),
+                                Math.Round(latency, 0)));
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (linkedCts.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning("Probe stream finalizó: {Message}", RollingErrorLog.Sanitize(ex.Message));
+            }
+            finally
+            {
+                channel.Writer.TryComplete();
+                try
+                {
+                    await video.DisposeAsync();
+                }
+                catch
+                {
+                }
+            }
+        }, CancellationToken.None);
+
+        var subscription = new ProbeSubscription(linkedCts, pumpTask);
+        return new CameraProbeSubscriptionResult(CameraStreamStatus.Success, channel.Reader, subscription);
+    }
+
     public async Task<CameraStreamSubscriptionResult> SubscribeStreamAsync(string id, double fps, int quality, CancellationToken token = default)
     {
         await Ready(token);
@@ -280,7 +383,7 @@ public sealed class HeadlessEngineService(
             var instances = await analyticStore.GetByCameraIdAsync(cameraId, token);
             var evaluators = instances.Count > 0
                 ? instances.Select(inst => evaluatorFactory.CreateEvaluator(inst, Detection())).ToArray()
-                : [evaluatorFactory.CreateEvaluator(new CameraAnalyticInstance($"an-{cameraId}-default", cameraId, "hand_raise", "Default HandRaise"), Detection())];
+                : Array.Empty<IAnalyticEvaluator>();
             session.Evaluators.Replace(evaluators);
         }
     }
@@ -296,7 +399,7 @@ public sealed class HeadlessEngineService(
             var instances = await analyticStore.GetByCameraIdAsync(camera.Id, token);
             var evaluators = instances.Count > 0
                 ? instances.Select(inst => evaluatorFactory.CreateEvaluator(inst, Detection())).ToArray()
-                : [evaluatorFactory.CreateEvaluator(new CameraAnalyticInstance($"an-{camera.Id}-default", camera.Id, "hand_raise", "Default HandRaise"), Detection())];
+                : Array.Empty<IAnalyticEvaluator>();
             var evaluatorProvider = new AtomicEvaluatorProvider(evaluators);
             var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_hostToken);
             var session = new CameraSession(cancellation, zones, evaluatorProvider);
@@ -323,6 +426,9 @@ public sealed class HeadlessEngineService(
             var credentials = await credentialStore.GetAsync(camera.Id, token);
             await using var source = CreateSource(camera, credentials);
             var backend = _backend ?? throw new InvalidOperationException("Backend no disponible.");
+            var userSettings = _preferences != null ? await _preferences.GetSettingsAsync(token) : null;
+            var targetInferenceFps = userSettings?.TargetInferenceFps ?? 0;
+
             var pipeline = new CameraPipeline(camera.Id, source, backend,
                 new OpenCvOverlayRenderer(options.Hands.KeypointConfidence),
                 Detection(), [],
@@ -333,7 +439,8 @@ public sealed class HeadlessEngineService(
                 log: message => logger.LogWarning("Cámara {Camera}: {Message}", camera.Id, RollingErrorLog.Sanitize(message)),
                 zoneProvider: session.Zones,
                 evaluatorProvider: session.Evaluators,
-                lineProvider: lineStore as HandRaise.Application.Lines.ILineProvider);
+                lineProvider: lineStore as HandRaise.Application.Lines.ILineProvider,
+                targetInferenceFps: targetInferenceFps);
             await foreach (var frame in pipeline.RunAsync(token))
             {
                 using (frame)
@@ -428,20 +535,40 @@ public sealed class HeadlessEngineService(
         AtomicEvaluatorProvider evaluators) : IDisposable
     {
         private readonly object _subscribersLock = new();
+        private readonly object _snapshotLock = new();
         private readonly List<StreamSubscriber> _subscribers = [];
-        private byte[]? _snapshot;
+        private VideoFrame? _latestFrame;
+        private byte[]? _cachedSnapshot;
 
         public CancellationTokenSource Cancellation { get; } = cancellation;
         public AtomicZoneProvider Zones { get; } = zones;
         public AtomicEvaluatorProvider Evaluators { get; } = evaluators;
         public Task? Task { get; set; }
 
-        public void SetSnapshot(byte[] value) => Volatile.Write(ref _snapshot, value);
-        public byte[]? GetSnapshot() => Volatile.Read(ref _snapshot)?.ToArray();
+        public byte[]? GetSnapshot()
+        {
+            lock (_snapshotLock)
+            {
+                if (_latestFrame is null) return _cachedSnapshot?.ToArray();
+                try
+                {
+                    _cachedSnapshot = OpenCvFrameJpegEncoder.Encode(_latestFrame, 75);
+                    return _cachedSnapshot.ToArray();
+                }
+                catch
+                {
+                    return _cachedSnapshot?.ToArray();
+                }
+            }
+        }
 
         public void OnFrame(VideoFrame frame, int snapshotQuality)
         {
-            SetSnapshot(OpenCvFrameJpegEncoder.Encode(frame, snapshotQuality));
+            lock (_snapshotLock)
+            {
+                _latestFrame?.Dispose();
+                _latestFrame = frame.Clone();
+            }
 
             StreamSubscriber[] subscribers;
             lock (_subscribersLock)
@@ -510,6 +637,11 @@ public sealed class HeadlessEngineService(
         public void Dispose()
         {
             Cancellation.Dispose();
+            lock (_snapshotLock)
+            {
+                _latestFrame?.Dispose();
+                _latestFrame = null;
+            }
             lock (_subscribersLock)
             {
                 foreach (var sub in _subscribers)
@@ -517,6 +649,32 @@ public sealed class HeadlessEngineService(
                     sub.Channel.Writer.TryComplete();
                 }
                 _subscribers.Clear();
+            }
+        }
+    }
+
+    private sealed class ProbeSubscription(
+        CancellationTokenSource cts,
+        Task pumpTask) : IAsyncDisposable
+    {
+        private bool _disposed;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            cts.Cancel();
+            try
+            {
+                await pumpTask.WaitAsync(TimeSpan.FromSeconds(3));
+            }
+            catch
+            {
+            }
+            finally
+            {
+                cts.Dispose();
             }
         }
     }

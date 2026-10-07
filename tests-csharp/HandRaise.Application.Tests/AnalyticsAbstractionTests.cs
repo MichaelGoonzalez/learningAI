@@ -125,7 +125,7 @@ public sealed class AnalyticsAbstractionTests
         }
 
         Assert.Equal(2, count);
-        Assert.Equal(2, backend.InferenceCount);
+        Assert.Equal(0, backend.InferenceCount);
     }
 
     [Fact]
