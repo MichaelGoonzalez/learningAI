@@ -261,6 +261,9 @@ public sealed class MultiModelAndCapacityApiTests : IDisposable
 
     private sealed class FakeCameraManagementService : ICameraManagementService
     {
+        public event Action<string, bool>? CameraRunningStateChanged;
+        public event Action? CamerasChanged;
+
         private readonly Dictionary<string, CameraView> _cameras = new(StringComparer.OrdinalIgnoreCase)
         {
             ["cam-1"] = new CameraView("cam-1", "Cam 1", "0", true, true, true, 30.0, null)

@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Threading;
 using HandRaise.Application.Analytics;
 using HandRaise.Application.Events;
@@ -347,6 +348,54 @@ public sealed class DesktopViewModelsTests
             Assert.NotNull(window);
             Assert.Same(vm, window.DataContext);
             Assert.True(vm.IsOverviewSelected);
+
+            // Force binding evaluation: an unshown window alone can leave bindings deferred.
+            dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            var embedded = Assert.Single(LogicalDescendants(window).OfType<HandRaise.Desktop.Views.TrainingLabView>());
+            System.Windows.Data.BindingOperations.GetBindingExpression(embedded, FrameworkElement.DataContextProperty)!.UpdateTarget();
+            Assert.Same(vm.TrainingLab, embedded.DataContext);
+            CheckTrainingBindings(embedded);
+            CheckTrainingBindings(new HandRaise.Desktop.Views.TrainingLabView { DataContext = vm.TrainingLab });
+
+            static IEnumerable<DependencyObject> LogicalDescendants(DependencyObject parent)
+            {
+                yield return parent;
+                foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+                    foreach (var descendant in LogicalDescendants(child))
+                        yield return descendant;
+            }
+
+            static void CheckTrainingBindings(HandRaise.Desktop.Views.TrainingLabView view)
+            {
+                var progressChecked = false;
+                foreach (var target in LogicalDescendants(view))
+                {
+                    var values = target.GetLocalValueEnumerator();
+                    while (values.MoveNext())
+                    {
+                        var property = values.Current.Property;
+                        var expression = System.Windows.Data.BindingOperations.GetBindingExpression(target, property);
+                        if (expression == null) continue;
+                        var binding = expression.ParentBinding;
+                        var sourceProperty = typeof(TrainingLabViewModel).GetProperty(binding.Path?.Path ?? "");
+                        if (sourceProperty == null) continue;
+                        var mode = binding.Mode;
+                        if (mode == System.Windows.Data.BindingMode.Default)
+                            mode = property.GetMetadata(target.GetType()) is FrameworkPropertyMetadata { BindsTwoWayByDefault: true }
+                                ? System.Windows.Data.BindingMode.TwoWay : System.Windows.Data.BindingMode.OneWay;
+                        if (sourceProperty.SetMethod?.IsPublic != true)
+                            Assert.True(mode != System.Windows.Data.BindingMode.TwoWay && mode != System.Windows.Data.BindingMode.OneWayToSource,
+                                $"{target.GetType().Name}.{property.Name} must not write to {sourceProperty.Name}.");
+                        if (target is System.Windows.Controls.ProgressBar && property == System.Windows.Controls.Primitives.RangeBase.ValueProperty)
+                        {
+                            Assert.Equal(System.Windows.Data.BindingMode.OneWay, binding.Mode);
+                            if (sourceProperty.Name == nameof(TrainingLabViewModel.Progress)) progressChecked = true;
+                        }
+                        expression.UpdateTarget();
+                    }
+                }
+                Assert.True(progressChecked);
+            }
         });
     }
 
@@ -1410,11 +1459,16 @@ public sealed class DesktopViewModelsTests
 
         Assert.True(vm.IsRunning);
         Assert.Equal("Detener", vm.ButtonText);
-        Assert.Equal("En línea", vm.CanonicalStateText);
+        // The current lifecycle starts a subscription; this stub never supplies a frame.
+        Assert.False(vm.IsStreaming);
+        Assert.Equal("Conectando", vm.CanonicalStateText);
     }
 
     private sealed class StubCameraManagementService : ICameraManagementService
     {
+        public event Action<string, bool>? CameraRunningStateChanged;
+        public event Action? CamerasChanged;
+
         public Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default) => Task.FromResult<IReadOnlyList<CameraView>>([]);
         public Task<CameraView?> GetAsync(string id, CancellationToken token = default) => Task.FromResult<CameraView?>(null);
         public Task<CameraView> CreateAsync(CameraWriteRequest request, CancellationToken token = default) => throw new NotSupportedException();

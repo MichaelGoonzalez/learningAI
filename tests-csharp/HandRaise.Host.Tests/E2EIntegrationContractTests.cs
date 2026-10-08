@@ -80,9 +80,9 @@ public sealed class E2EIntegrationContractTests : IDisposable
                 ["storage:rulesStorePath"] = _rulesPath,
                 ["storage:alertsStorePath"] = _alertsPath,
                 ["storage:linesStorePath"] = _linesPath,
-                ["storage:destinationsStorePath"] = _destinationsPath,
-                ["storage:policiesStorePath"] = _policiesPath,
-                ["storage:attemptsStorePath"] = _attemptsPath
+                ["storage:notificationDestinationsStorePath"] = _destinationsPath,
+                ["storage:notificationPoliciesStorePath"] = _policiesPath,
+                ["storage:notificationAttemptsStorePath"] = _attemptsPath
             });
             builder.Services.AddSingleton<ICameraStore>(cameraStoreAndManager);
             builder.Services.AddSingleton<ICameraManagementService>(cameraStoreAndManager);
@@ -328,7 +328,7 @@ public sealed class E2EIntegrationContractTests : IDisposable
             Configuration: new Dictionary<string, object?> { ["url"] = "http://localhost:9999/webhook", ["method"] = "POST" },
             Enabled: true);
         var addDestResp = await client.PostAsJsonAsync("/api/v1/notifications/destinations", validDestination, AnalyticJsonDefaults.Options);
-        Assert.Equal(HttpStatusCode.Created, addDestResp.StatusCode);
+        Assert.True(addDestResp.StatusCode == HttpStatusCode.Created, await addDestResp.Content.ReadAsStringAsync());
 
         // 9. Query Alerts
         var alertsResp = await client.GetAsync("/api/v1/alerts");
@@ -382,6 +382,9 @@ public sealed class E2EIntegrationContractTests : IDisposable
             Task.FromResult(_definitions.Remove(id));
 
         // ICameraManagementService
+        public event Action<string, bool>? CameraRunningStateChanged;
+        public event Action? CamerasChanged;
+
         async Task<IReadOnlyList<CameraView>> ICameraManagementService.ListAsync(CancellationToken token)
         {
             var defs = await ListAsync(token);

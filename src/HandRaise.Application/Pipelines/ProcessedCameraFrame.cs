@@ -11,5 +11,6 @@ public sealed record ProcessedCameraFrame(
     IReadOnlyList<HandEvent> Events,
     CameraPipelineMetrics Metrics) : IDisposable
 {
+    public IReadOnlyList<HandRaise.Application.Analytics.ObjectDetection> Objects { get; init; } = [];
     public void Dispose() => Frame.Dispose();
 }

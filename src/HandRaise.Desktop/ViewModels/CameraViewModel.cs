@@ -29,6 +29,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
     private readonly IAnalyticCatalog? _analyticCatalog;
     private readonly ILineStore? _lineStore;
     private readonly ICapabilityPlanner? _capabilityPlanner;
+    private readonly IModelRegistry? _modelRegistry;
     private readonly ICameraStore? _cameraStore;
     private readonly IHandEventRepository? _eventRepository;
     private readonly IRuleStore? _ruleStore;
@@ -134,7 +135,8 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         string snapshotDirectory = "data/snapshots",
         IRuleStore? ruleStore = null,
         IAlertStore? alertStore = null,
-        HandEventBus? eventBus = null)
+        HandEventBus? eventBus = null,
+        IModelRegistry? modelRegistry = null)
     {
         _id = camera.Id;
         _name = camera.Name;
@@ -147,6 +149,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         _cameraService = cameraService;
         _analyticService = analyticService;
         _analyticCatalog = analyticCatalog;
+        _modelRegistry = modelRegistry;
         _lineStore = lineStore;
         _capabilityPlanner = capabilityPlanner;
         _cameraStore = cameraStore;
@@ -636,7 +639,13 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         DynamicParameters.Clear();
         foreach (var p in definition.Parameters)
         {
-            DynamicParameters.Add(new AnalyticParameterItemViewModel(p));
+            var parameter = p;
+            if (definition.Id == CustomObjectEvaluator.TypeId && p.Key == "model_id")
+                parameter = p with { Type = ParameterType.Select, DefaultValue = null,
+                    Options = (_modelRegistry?.ListModels() ?? []).Where(m => m.CustomTraining != null)
+                        .OrderBy(m => m.DisplayName).ThenByDescending(m => m.CustomTraining!.CreatedAtUtc)
+                        .Select(m => new ParameterOption(m.Id, $"{m.DisplayName} · Versión {m.Version}")).ToArray() };
+            DynamicParameters.Add(new AnalyticParameterItemViewModel(parameter));
         }
 
         if (RequiresZone)
@@ -994,13 +1003,8 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         OnPropertyChanged(nameof(SourceDescription));
         OnPropertyChanged(nameof(SourceType));
 
+        var wasRunning = IsRunning;
         IsRunning = view.Running;
-        if (!_isStreaming)
-        {
-            Status = view.Running
-                ? (view.Online ? "En línea" : "Conectando...")
-                : "Desconectada";
-        }
 
         if (view.Error is not null)
         {
@@ -1011,10 +1015,34 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
             Error = null;
         }
 
-        if (!_isStreaming || FramesPerSecond == 0)
+        if (!view.Running)
         {
-            FramesPerSecond = view.FramesPerSecond;
+            Status = "Detenida";
+            FramesPerSecond = 0;
+            if (_isStreaming)
+            {
+                _ = StopStreamingAsync();
+            }
         }
+        else
+        {
+            Status = view.Online ? "En línea" : "Conectando...";
+            if (!_isStreaming || FramesPerSecond == 0)
+            {
+                FramesPerSecond = view.FramesPerSecond;
+            }
+            if (!_isStreaming && wasRunning != view.Running)
+            {
+                _ = StartAsync();
+            }
+        }
+
+        OnPropertyChanged(nameof(CanonicalStateText));
+        OnPropertyChanged(nameof(CanonicalStateIcon));
+        OnPropertyChanged(nameof(CanonicalStateBrush));
+        OnPropertyChanged(nameof(ButtonText));
+        OnPropertyChanged(nameof(ActionButtonText));
+        OnPropertyChanged(nameof(ContextualDiagnosticReason));
     }
 
     public async Task StartAsync()
@@ -1025,10 +1053,18 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
             if (_isStreaming) return;
             _isStreaming = true;
             IsRunning = true;
-            Status = "Conectando...";
+            if (Status != "En línea")
+            {
+                Status = "Conectando...";
+            }
             Error = null;
             _streamCancellation = new CancellationTokenSource();
             _streamTask = Task.Run(() => StreamLoopAsync(_streamCancellation.Token));
+            OnPropertyChanged(nameof(CanonicalStateText));
+            OnPropertyChanged(nameof(CanonicalStateIcon));
+            OnPropertyChanged(nameof(CanonicalStateBrush));
+            OnPropertyChanged(nameof(ButtonText));
+            OnPropertyChanged(nameof(ActionButtonText));
         }
         finally
         {
@@ -1046,7 +1082,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
             _streamCancellation?.Cancel();
             if (_streamTask is not null)
             {
-                try { await _streamTask; } catch (OperationCanceledException) { }
+                try { await _streamTask.WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
             }
             if (_subscription is not null)
             {
@@ -1058,7 +1094,12 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
             _streamTask = null;
             FramesPerSecond = 0;
             VideoImage = null;
-            Status = "Desconectada";
+            Status = IsRunning ? "Desconectada" : "Detenida";
+            OnPropertyChanged(nameof(CanonicalStateText));
+            OnPropertyChanged(nameof(CanonicalStateIcon));
+            OnPropertyChanged(nameof(CanonicalStateBrush));
+            OnPropertyChanged(nameof(ButtonText));
+            OnPropertyChanged(nameof(ActionButtonText));
         }
         finally
         {
@@ -1115,13 +1156,20 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
                 await StopStreamingAsync();
                 IsRunning = false;
                 Status = "Detenida";
+                FramesPerSecond = 0;
             }
             else
             {
                 await _cameraService.StartAsync(Id);
                 IsRunning = true;
+                Status = "Conectando...";
                 await StartAsync();
             }
+            OnPropertyChanged(nameof(CanonicalStateText));
+            OnPropertyChanged(nameof(CanonicalStateIcon));
+            OnPropertyChanged(nameof(CanonicalStateBrush));
+            OnPropertyChanged(nameof(ButtonText));
+            OnPropertyChanged(nameof(ActionButtonText));
         }
         catch (Exception ex)
         {
@@ -1706,6 +1754,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
         {
             int count = assigned.AnalyticTypeId switch
             {
+                "custom_object_detection" => CameraEvents.Count(e => e.AnalyticInstanceId == assigned.InstanceId),
                 "hand_raise" => CameraEvents.Count(e => e.RawEventType is "hand_raised" or "hand_lowered"),
                 "person_presence" => CameraEvents.Count(e => e.RawEventType.Contains("presence", StringComparison.OrdinalIgnoreCase)),
                 "zone_intrusion" => CameraEvents.Count(e => e.RawEventType.Contains("intrusion", StringComparison.OrdinalIgnoreCase)),
@@ -1716,6 +1765,7 @@ public sealed class CameraViewModel : ObservableObject, IAsyncDisposable
 
             var lastEvent = CameraEvents.FirstOrDefault(e => assigned.AnalyticTypeId switch
             {
+                "custom_object_detection" => e.AnalyticInstanceId == assigned.InstanceId,
                 "hand_raise" => e.RawEventType is "hand_raised" or "hand_lowered",
                 "person_presence" => e.RawEventType.Contains("presence", StringComparison.OrdinalIgnoreCase),
                 "zone_intrusion" => e.RawEventType.Contains("intrusion", StringComparison.OrdinalIgnoreCase),

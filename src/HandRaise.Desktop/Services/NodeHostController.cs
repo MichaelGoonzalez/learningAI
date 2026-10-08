@@ -35,8 +35,26 @@ public sealed record NodeHostSettings(
 
 public sealed class NodeHostController : IAsyncDisposable
 {
+    private readonly HandRaise.Infrastructure.Windows.Training.TrainingPaths? _trainingPaths;
+    public NodeHostController(IModelRegistry? registry = null, HandRaise.Infrastructure.Windows.Training.TrainingPaths? trainingPaths = null)
+    { _sharedRegistry = registry; _trainingPaths = trainingPaths; }
     private readonly SemaphoreSlim _gate = new(1, 1);
     private WebApplication? _app;
+    private IModelRegistry? _sharedRegistry;
+    private Task<HandRaise.Application.Training.TrainingApplicationService>? _training;
+    private readonly object _trainingGate = new();
+    private bool _disposed;
+
+    public Task<HandRaise.Application.Training.TrainingApplicationService> GetTrainingAsync()
+    {
+        lock (_trainingGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var registry = _sharedRegistry ?? throw new InvalidOperationException("Inicie VisionControl antes de abrir el entrenamiento.");
+            return _training ??= HandRaise.Infrastructure.Windows.Training.TrainingCore.CreateAsync(registry, _trainingPaths,
+                activeCameraCount: () => Metrics?.Cameras().Count(c => c.Online) ?? 0);
+        }
+    }
     private NodeHostSettings _currentSettings = new();
     private NodeHostStatus _status = NodeHostStatus.Stopped;
     private string _statusMessage = "Detenido";
@@ -70,7 +88,7 @@ public sealed class NodeHostController : IAsyncDisposable
     public ICameraManagementService? CameraService => _testCameraService ?? _app?.Services.GetService<ICameraManagementService>();
     public IAnalyticManagementService? AnalyticService => _app?.Services.GetService<IAnalyticManagementService>();
     public IAnalyticCatalog? AnalyticCatalog => _app?.Services.GetService<IAnalyticCatalog>();
-    public IModelRegistry? ModelRegistry => _app?.Services.GetService<IModelRegistry>();
+    public IModelRegistry? ModelRegistry => _sharedRegistry ?? _app?.Services.GetService<IModelRegistry>();
     public ICapabilityPlanner? CapabilityPlanner => _app?.Services.GetService<ICapabilityPlanner>();
     public IRuleStore? RuleStore => _app?.Services.GetService<IRuleStore>();
     public IAlertStore? AlertStore => _app?.Services.GetService<IAlertStore>();
@@ -119,6 +137,7 @@ public sealed class NodeHostController : IAsyncDisposable
             {
                 var app = HostApplication.Build([], startCameras: true, builder =>
                 {
+                    if (_sharedRegistry != null) builder.Services.AddSingleton<IModelRegistry>(_sharedRegistry);
                     builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         ["api:port"] = _currentSettings.Port.ToString(),
@@ -129,6 +148,7 @@ public sealed class NodeHostController : IAsyncDisposable
 
                 await app.StartAsync(token);
                 _app = app;
+                _sharedRegistry ??= app.Services.GetRequiredService<IModelRegistry>();
                 SetStatus(NodeHostStatus.Running, "Operativo");
                 return true;
             }
@@ -215,7 +235,25 @@ public sealed class NodeHostController : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await StopAsync(CancellationToken.None);
-        _gate.Dispose();
+        Task<HandRaise.Application.Training.TrainingApplicationService>? training;
+        lock (_trainingGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            training = _training;
+        }
+        try
+        {
+            if (training != null)
+            {
+                try { await (await training).DisposeAsync(); }
+                catch when (training.IsFaulted) { /* Composition failed before acquiring a service. */ }
+            }
+        }
+        finally
+        {
+            try { await StopAsync(CancellationToken.None); }
+            finally { _gate.Dispose(); }
+        }
     }
 }

@@ -48,6 +48,7 @@ public sealed class AlertRuleItemViewModel : ObservableObject
 
     public static string TranslateEventType(string eventType) => eventType switch
     {
+        "custom_object_detected" => "Objeto personalizado detectado",
         "hand_raised" => "Mano levantada",
         "hand_lowered" => "Mano bajada",
         "person_presence_started" => "Persona detectada",

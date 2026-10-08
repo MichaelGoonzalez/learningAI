@@ -249,6 +249,9 @@ public sealed class RealtimeApiTests
 
     private sealed class StreamingTestCameraManager(int maxClients = 4) : ICameraManagementService
     {
+        public event Action<string, bool>? CameraRunningStateChanged;
+        public event Action? CamerasChanged;
+
         private int _activeClients;
         public int ActiveClients => Volatile.Read(ref _activeClients);
         private readonly byte[] _dummyJpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0xFF, 0xD9];

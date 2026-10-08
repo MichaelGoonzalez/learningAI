@@ -13,6 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <None Update="TrainingWorkerStub.ps1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/HandRaise.Application/HandRaise.Application.csproj" />

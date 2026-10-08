@@ -20,12 +20,15 @@
                 BorderThickness="0,0,0,1"
                 Padding="16,10">
             <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Text="{Binding SelectedDetailCamera.Error}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource VisionTextPrimary}" Margin="0,6,0,0"/>
 
                 <!-- Back button -->
                 <Button Grid.Column="0"
@@ -806,7 +809,8 @@
                     VerticalAlignment="Center">
                 <Grid>
                     <!-- STEP 1: ¿QUÉ QUIERES DETECTAR? (Human Cards) -->
-                    <StackPanel Visibility="{Binding IsAiWizardStep1, Converter={StaticResource BooleanToVisibility}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding IsAiWizardStep1, Converter={StaticResource BooleanToVisibility}}">
+                    <StackPanel>
                         <TextBlock Text="Agregar Solución IA"
                                    FontSize="17"
                                    FontWeight="Bold"
@@ -819,6 +823,14 @@
 
                         <!-- Human Solution Cards -->
                         <StackPanel Margin="0,0,0,16">
+                            <Button Margin="0,0,0,8" Padding="14,10" HorizontalContentAlignment="Left"
+                                    Background="{DynamicResource VisionSurface}" BorderBrush="{DynamicResource VisionBorder}" BorderThickness="1"
+                                    Command="{Binding SelectCatalogAnalyticAndNextCommand}" CommandParameter="custom_object_detection">
+                                <StackPanel>
+                                    <TextBlock Text="Detección de objetos personalizada" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource VisionTextPrimary}"/>
+                                    <TextBlock Text="Seleccione un modelo entrenado y su versión." FontSize="11" Foreground="{DynamicResource VisionTextSecondary}"/>
+                                </StackPanel>
+                            </Button>
                             <!-- Card 1: Person Presence -->
                                     <Button Margin="0,0,0,8"
                                             Padding="14,10"
@@ -944,6 +956,7 @@
                                         HorizontalAlignment="Right"/>
                             </StackPanel>
 
+                    </ScrollViewer>
                             <!-- STEP 2: CONFIGURACIÓN COMPACTA (Data-Driven, No Scroll) -->
                             <StackPanel Visibility="{Binding IsAiWizardStep2, Converter={StaticResource BooleanToVisibility}}">
                                 <TextBlock Text="{Binding SelectedCatalogAnalytic.DisplayName, StringFormat='{}Configurar {0}'}"

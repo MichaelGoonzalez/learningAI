@@ -141,6 +141,7 @@
                                 <RadioButton Content="Inicio" Style="{StaticResource NavRadioButton}" IsChecked="{Binding IsOverviewSelected, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="0" />
                                 <RadioButton Content="Cámaras" Style="{StaticResource NavRadioButton}" IsChecked="{Binding IsCamerasSelected, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="1" />
                                 <RadioButton Content="Métricas" Style="{StaticResource NavRadioButton}" IsChecked="{Binding IsMetricsSelected, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="2" />
+                                <RadioButton Content="Entrenamiento de Modelos" Style="{StaticResource NavRadioButton}" IsChecked="{Binding IsTrainingSelected, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="10" />
                             </StackPanel>
                         </ScrollViewer>
 
@@ -173,6 +174,7 @@
 
                     <!-- 8. DETALLE DE CÁMARA (CAMERA WORKSPACE) -->
                     <views:CameraWorkspaceView Visibility="{Binding IsCameraDetailSelected, Converter={StaticResource BooleanToVisibility}}" />
+                    <views:TrainingLabView DataContext="{Binding TrainingLab}" Visibility="{Binding DataContext.IsTrainingSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibility}}" />
                 </Grid>
             </Grid>
 

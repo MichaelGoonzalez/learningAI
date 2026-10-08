@@ -87,6 +87,7 @@ public sealed class WindowsMlOnnxBackend : IInferenceBackend
                 [1, 3, model.InputHeight, model.InputWidth]);
             var inputs = new Dictionary<string, OrtValue> { [inputName] = input };
             using var runOptions = new RunOptions();
+            using var terminateCustom = model.CustomTraining != null ? cancellationToken.Register(() => runOptions.Terminate = true) : default;
             var stopwatch = Stopwatch.StartNew();
             using var outputs = session.Run(runOptions, inputs, [outputName]);
             stopwatch.Stop();
@@ -94,7 +95,8 @@ public sealed class WindowsMlOnnxBackend : IInferenceBackend
             var output = outputs[0];
             var tensorInfo = output.GetTensorTypeAndShape();
             var postprocessWatch = Stopwatch.StartNew();
-            var people = YoloPosePostprocessor.Process(
+            var people = model.CustomTraining != null ? ObjectDetectionPostprocessor.Process(
+                output.GetTensorDataAsSpan<float>(), tensorInfo.Shape, preprocessed.Transform, model) : YoloPosePostprocessor.Process(
                 output.GetTensorDataAsSpan<float>(),
                 tensorInfo.Shape,
                 preprocessed.Transform,

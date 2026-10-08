@@ -60,6 +60,7 @@ public sealed class CameraAnalyticItemViewModel : ObservableObject
 
     public string Icon => AnalyticTypeId switch
     {
+        "custom_object_detection" => "",
         "person_presence" => "👤",
         "zone_intrusion" => "🛑",
         "line_crossing" => "↔️",

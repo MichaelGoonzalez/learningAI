@@ -34,6 +34,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly Dispatcher _dispatcher;
     private readonly Action<bool> _applyTheme;
     private readonly DispatcherTimer _pollTimer;
+    public TrainingLabViewModel TrainingLab { get; }
+    public bool IsTrainingSelected => _selectedNavIndex == 10;
 
     private DeviceItemViewModel? _selectedDevice;
     private string? _selectedCameraFilter;
@@ -144,6 +146,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         Policies = [];
         Attempts = [];
         Models = [];
+        TrainingLab = new TrainingLabViewModel(_hostController, () => SelectedNavIndex = 1);
         CameraFilters = ["Todas"];
         SelectedCameraFilter = "Todas";
 
@@ -347,6 +350,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 }
 
                 OnPropertyChanged(nameof(IsOverviewSelected));
+                OnPropertyChanged(nameof(IsTrainingSelected));
+                if (value == 10) TrainingLab.RefreshCommand.Execute(null);
                 OnPropertyChanged(nameof(IsCamerasSelected));
                 OnPropertyChanged(nameof(IsMetricsSelected));
                 OnPropertyChanged(nameof(IsAlertsSelected));
@@ -1028,6 +1033,13 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         finally
         {
             IsNodeBusy = false;
+            if (_hostController.CameraService is not null)
+            {
+                _hostController.CameraService.CameraRunningStateChanged -= OnCameraRunningStateChanged;
+                _hostController.CameraService.CameraRunningStateChanged += OnCameraRunningStateChanged;
+                _hostController.CameraService.CamerasChanged -= OnCamerasChanged;
+                _hostController.CameraService.CamerasChanged += OnCamerasChanged;
+            }
             _pollTimer.Start();
             UpdateFromHostState();
             await SyncCamerasAsync();
@@ -2231,12 +2243,38 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     private void OnHostStatusChanged(NodeHostStatus status, string message)
     {
+        if (_hostController.CameraService is not null)
+        {
+            _hostController.CameraService.CameraRunningStateChanged -= OnCameraRunningStateChanged;
+            _hostController.CameraService.CameraRunningStateChanged += OnCameraRunningStateChanged;
+            _hostController.CameraService.CamerasChanged -= OnCamerasChanged;
+            _hostController.CameraService.CamerasChanged += OnCamerasChanged;
+        }
+
         _dispatcher.BeginInvoke(async () =>
         {
             StatusMessage = message;
             UpdateFromHostState();
             await SyncCamerasAsync();
             await RefreshAlertsAsync();
+        });
+    }
+
+    private void OnCameraRunningStateChanged(string cameraId, bool isRunning)
+    {
+        _dispatcher.BeginInvoke(async () =>
+        {
+            await SyncCamerasAsync();
+            UpdateFromHostState();
+        });
+    }
+
+    private void OnCamerasChanged()
+    {
+        _dispatcher.BeginInvoke(async () =>
+        {
+            await SyncCamerasAsync();
+            UpdateFromHostState();
         });
     }
 
@@ -2441,7 +2479,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                         _configuration.Storage.SnapshotDirectory,
                         _hostController.RuleStore,
                         _hostController.AlertStore,
-                        _hostController.EventBus);
+                        _hostController.EventBus,
+                        _hostController.ModelRegistry);
 
                     Cameras.Add(newVm);
                     await newVm.InitializeZonesAsync();
@@ -2474,13 +2513,22 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _pollTimer.Stop();
-        _hostController.StatusChanged -= OnHostStatusChanged;
-        await StopProbePreviewAsync();
-        for (var i = 0; i < Cameras.Count; i++)
+        try
         {
-            await Cameras[i].DisposeAsync();
+            await TrainingLab.DisposeAsync();
+            _hostController.StatusChanged -= OnHostStatusChanged;
+            if (_hostController.CameraService is not null)
+            {
+                _hostController.CameraService.CameraRunningStateChanged -= OnCameraRunningStateChanged;
+                _hostController.CameraService.CamerasChanged -= OnCamerasChanged;
+            }
+            await StopProbePreviewAsync();
+            for (var i = 0; i < Cameras.Count; i++)
+            {
+                await Cameras[i].DisposeAsync();
+            }
+            Cameras.Clear();
         }
-        Cameras.Clear();
-        await _hostController.DisposeAsync();
+        finally { await _hostController.DisposeAsync(); }
     }
 }

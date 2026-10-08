@@ -7,7 +7,7 @@ namespace HandRaise.Desktop;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
-    private bool _allowClose;
+    private bool _isClosing;
 
     public MainWindow(MainViewModel viewModel)
     {
@@ -19,15 +19,18 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs eventArgs)
     {
-        if (_allowClose)
+        if (_isClosing)
         {
             return;
         }
 
         eventArgs.Cancel = true;
+        _isClosing = true;
         IsEnabled = false;
+
         try
         {
+            Closing -= OnClosing;
             await _viewModel.DisposeAsync();
         }
         catch (Exception exception)
@@ -40,8 +43,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _allowClose = true;
-            Close();
+            System.Windows.Application.Current?.Shutdown();
         }
     }
 }

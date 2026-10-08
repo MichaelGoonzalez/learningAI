@@ -11,6 +11,8 @@ public class AnalyticEvaluatorFactory : IAnalyticEvaluatorFactory
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(defaultOptions);
 
+        if (CustomObjectEvaluator.IsCustom(instance.AnalyticTypeId)) return new CustomObjectEvaluator(instance);
+
         if (string.Equals(instance.AnalyticTypeId, "hand_raise", StringComparison.OrdinalIgnoreCase))
         {
             var strictMode = ExtractBoolean(instance.Configuration, "strict_mode", defaultOptions.StrictMode);

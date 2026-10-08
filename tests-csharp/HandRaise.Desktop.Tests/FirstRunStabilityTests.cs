@@ -492,6 +492,9 @@ public sealed class FirstRunStabilityTests : IDisposable
 
     private sealed class InMemoryCameraManagementService(ICameraStore store) : ICameraManagementService
     {
+        public event Action<string, bool>? CameraRunningStateChanged;
+        public event Action? CamerasChanged;
+
         public async Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default)
         {
             var defs = await store.ListAsync(token);
@@ -530,6 +533,9 @@ public sealed class FirstRunStabilityTests : IDisposable
 
     private sealed class StubCameraManagementService : ICameraManagementService
     {
+        public event Action<string, bool>? CameraRunningStateChanged;
+        public event Action? CamerasChanged;
+
         public Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default) => Task.FromResult<IReadOnlyList<CameraView>>([]);
         public Task<CameraView?> GetAsync(string id, CancellationToken token = default) => Task.FromResult<CameraView?>(null);
         public Task<CameraView> CreateAsync(CameraWriteRequest request, CancellationToken token = default) => throw new NotSupportedException();

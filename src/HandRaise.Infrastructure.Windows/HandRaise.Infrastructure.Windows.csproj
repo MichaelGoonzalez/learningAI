@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="../../tools/training-worker/worker.py" Link="training-worker/worker.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../tools/training-worker/requirements.txt" Link="training-worker/requirements.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <ProjectReference Include="../HandRaise.Application/HandRaise.Application.csproj" />
     <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.3.42" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />

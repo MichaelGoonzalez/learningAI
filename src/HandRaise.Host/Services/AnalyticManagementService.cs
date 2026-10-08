@@ -73,6 +73,7 @@ public sealed class AnalyticManagementService : IAnalyticManagementService
         if (definition == null)
             throw new ArgumentException($"El tipo de analítica '{request.AnalyticTypeId}' no existe en el catálogo.");
 
+        if (request.Enabled != false) ValidateCustomModel(request.AnalyticTypeId, request.Configuration);
         var (isValid, errorMsg) = _catalog.ValidateConfiguration(request.AnalyticTypeId, request.Configuration);
         if (!isValid)
             throw new ArgumentException(errorMsg);
@@ -160,6 +161,7 @@ public sealed class AnalyticManagementService : IAnalyticManagementService
             return null;
         }
 
+        if (request.Enabled ?? existing.Enabled) ValidateCustomModel(existing.AnalyticTypeId, request.Configuration ?? existing.Configuration);
         if (request.Configuration != null)
         {
             var (isValid, errorMsg) = _catalog.ValidateConfiguration(existing.AnalyticTypeId, request.Configuration);
@@ -267,5 +269,14 @@ public sealed class AnalyticManagementService : IAnalyticManagementService
                 // Ignored if engine is shutting down or not available
             }
         }
+    }
+
+    private void ValidateCustomModel(string type, IReadOnlyDictionary<string, object?>? configuration)
+    {
+        if (!CustomObjectEvaluator.IsCustom(type)) return;
+        var id = configuration?.GetValueOrDefault("model_id")?.ToString();
+        var registry = _serviceProvider.GetService<HandRaise.Application.Inference.IModelRegistry>();
+        if (string.IsNullOrWhiteSpace(id) || registry?.GetModel(id)?.CustomTraining == null)
+            throw new ArgumentException("VisionControl no pudo cargar este modelo. Seleccione una versión disponible.");
     }
 }

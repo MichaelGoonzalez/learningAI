@@ -54,7 +54,7 @@ public static class HostApplication
         {
             builder.Services.AddSingleton<IModelRegistry>(_ =>
             {
-                var registry = new StandardModelRegistry();
+                var registry = new StandardModelRegistry(new HandRaise.Infrastructure.Windows.Training.TrainingPaths().CustomModels);
                 var defaultModel = new ModelDescriptor(
                     Id: "yolo26n-pose",
                     DisplayName: "YOLO26 Nano Pose",

@@ -97,6 +97,9 @@ public sealed class CameraManagementApiTests
 
     private sealed class FakeCameraManager : ICameraManagementService
     {
+        public event Action<string, bool>? CameraRunningStateChanged;
+        public event Action? CamerasChanged;
+
         private readonly Dictionary<string, CameraView> _values = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, IReadOnlyList<NormalizedZone>> _zones = new(StringComparer.OrdinalIgnoreCase);
         public Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default) => Task.FromResult<IReadOnlyList<CameraView>>(_values.Values.ToArray());

@@ -38,7 +38,8 @@ public sealed class HeadlessEngineService(
     IAnalyticInstanceStore analyticStore,
     IAnalyticEvaluatorFactory evaluatorFactory,
     ILogger<HeadlessEngineService> logger,
-    HandRaise.Application.Lines.ILineStore? lineStore = null) : BackgroundService, ICameraManagementService
+    HandRaise.Application.Lines.ILineStore? lineStore = null,
+    IModelRegistry? modelRegistry = null) : BackgroundService, ICameraManagementService
 {
     private readonly ConcurrentDictionary<string, CameraSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
@@ -355,6 +356,9 @@ public sealed class HeadlessEngineService(
         return new CameraProbeSubscriptionResult(CameraStreamStatus.Success, channel.Reader, subscription);
     }
 
+    public event Action<string, bool>? CameraRunningStateChanged;
+    public event Action? CamerasChanged;
+
     public async Task<CameraStreamSubscriptionResult> SubscribeStreamAsync(string id, double fps, int quality, CancellationToken token = default)
     {
         await Ready(token);
@@ -408,15 +412,27 @@ public sealed class HeadlessEngineService(
             session.Task = RunCameraAsync(camera, session, cancellation.Token);
         }
         finally { _lifecycle.Release(); }
+
+        CameraRunningStateChanged?.Invoke(camera.Id, true);
+        CamerasChanged?.Invoke();
     }
 
     private async Task StopCoreAsync(string id)
     {
-        if (!_sessions.TryRemove(id, out var session)) { metrics.SetOffline(id); return; }
+        if (!_sessions.TryRemove(id, out var session))
+        {
+            metrics.SetOffline(id);
+            CameraRunningStateChanged?.Invoke(id, false);
+            CamerasChanged?.Invoke();
+            return;
+        }
         session.Cancellation.Cancel();
         try { if (session.Task is not null) await session.Task; } catch (OperationCanceledException) { }
         session.Dispose();
         metrics.SetOffline(id);
+
+        CameraRunningStateChanged?.Invoke(id, false);
+        CamerasChanged?.Invoke();
     }
 
     private async Task RunCameraAsync(CameraDefinition camera, CameraSession session, CancellationToken token)
@@ -428,6 +444,7 @@ public sealed class HeadlessEngineService(
             var backend = _backend ?? throw new InvalidOperationException("Backend no disponible.");
             var userSettings = _preferences != null ? await _preferences.GetSettingsAsync(token) : null;
             var targetInferenceFps = userSettings?.TargetInferenceFps ?? 0;
+            await using var customRuntime = modelRegistry == null ? null : new CustomObjectRuntime(modelRegistry);
 
             var pipeline = new CameraPipeline(camera.Id, source, backend,
                 new OpenCvOverlayRenderer(options.Hands.KeypointConfidence),
@@ -440,7 +457,9 @@ public sealed class HeadlessEngineService(
                 zoneProvider: session.Zones,
                 evaluatorProvider: session.Evaluators,
                 lineProvider: lineStore as HandRaise.Application.Lines.ILineProvider,
-                targetInferenceFps: targetInferenceFps);
+                targetInferenceFps: targetInferenceFps,
+                customRuntime: customRuntime,
+                customErrors: errors => session.CustomError = errors.Count == 0 ? null : string.Join("; ", errors.Values.Distinct()));
             await foreach (var frame in pipeline.RunAsync(token))
             {
                 using (frame)
@@ -476,7 +495,8 @@ public sealed class HeadlessEngineService(
     {
         var status = metrics.Cameras().FirstOrDefault(x => x.CameraId == camera.Id);
         return new(camera.Id, camera.Name, camera.Source, camera.Enabled, _sessions.ContainsKey(camera.Id),
-            status?.Online ?? false, status?.FramesPerSecond ?? 0, status?.Error);
+            status?.Online ?? false, status?.FramesPerSecond ?? 0,
+            _sessions.TryGetValue(camera.Id, out var session) && session.CustomError != null ? session.CustomError : status?.Error);
     }
 
     private static (CameraDefinition Camera, CameraCredentials? Credentials) Prepare(CameraWriteRequest request, string id, IReadOnlyList<NormalizedZone> zones)
@@ -544,6 +564,7 @@ public sealed class HeadlessEngineService(
         public AtomicZoneProvider Zones { get; } = zones;
         public AtomicEvaluatorProvider Evaluators { get; } = evaluators;
         public Task? Task { get; set; }
+        public string? CustomError { get; set; }
 
         public byte[]? GetSnapshot()
         {
@@ -628,6 +649,20 @@ public sealed class HeadlessEngineService(
                         _subscribers.Remove(subscriber!);
                     }
                 });
+
+                lock (_snapshotLock)
+                {
+                    if (_latestFrame is not null)
+                    {
+                        try
+                        {
+                            var initialJpeg = OpenCvFrameJpegEncoder.Encode(_latestFrame, quality);
+                            subscriber.LastSentTicks = Stopwatch.GetTimestamp();
+                            subscriber.Channel.Writer.TryWrite(initialJpeg);
+                        }
+                        catch { }
+                    }
+                }
 
                 _subscribers.Add(subscriber);
                 return (CameraStreamStatus.Success, subscriber, null);

@@ -5,6 +5,11 @@ namespace HandRaise.Application.Analytics;
 
 public class StandardAnalyticCatalog : IAnalyticCatalog
 {
+    public static readonly AnalyticDefinition CustomObjectDefinition = new(
+        CustomObjectEvaluator.TypeId, "Detección de objetos personalizada", "Reconoce los objetos de un modelo entrenado por usted.",
+        AnalyticCategory.General, "1.0.0", [InferenceCapability.ObjectDetection], [], ["custom_object_detected"],
+        [new("model_id", "Modelo y versión", ParameterType.String, ""),
+         new("confidence_threshold", "Confianza mínima", ParameterType.Number, .5, Min: .05, Max: 1, Step: .05)]);
     public static readonly AnalyticDefinition HandRaiseDefinition = new(
         Id: "hand_raise",
         DisplayName: "Mano Levantada",
@@ -309,7 +314,8 @@ public class StandardAnalyticCatalog : IAnalyticCatalog
             [PersonPresenceDefinition.Id] = PersonPresenceDefinition,
             [ZoneIntrusionDefinition.Id] = ZoneIntrusionDefinition,
             [LineCrossingDefinition.Id] = LineCrossingDefinition,
-            [PersonCountingDefinition.Id] = PersonCountingDefinition
+            [PersonCountingDefinition.Id] = PersonCountingDefinition,
+            [CustomObjectDefinition.Id] = CustomObjectDefinition
         };
 
         if (customDefinitions != null)

@@ -23,6 +23,11 @@ public enum CapacityStatus
 
 public sealed record ModelDescriptor
 {
+    // Null preserves the built-in JSON contract. A custom artifact has provenance and its ordered class map.
+    [JsonPropertyName("custom_training")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HandRaise.Domain.Training.CustomModelMetadata? CustomTraining { get; init; }
+
     [JsonPropertyName("id")]
     public string Id { get; init; }
 

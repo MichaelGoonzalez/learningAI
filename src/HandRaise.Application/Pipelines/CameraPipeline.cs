@@ -38,6 +38,8 @@ public sealed class CameraPipeline
     private readonly SnapshotEncodingOptions? _snapshotOptions;
     private readonly Action<string>? _log;
     private readonly double _targetInferenceFps;
+    private readonly ICustomObjectRuntime? _customRuntime;
+    private readonly Action<IReadOnlyDictionary<string, string>>? _customErrors;
 
     public IReadOnlyList<IAnalyticEvaluator> Evaluators => _evaluatorProvider?.GetEvaluators() ?? _evaluators;
 
@@ -62,7 +64,9 @@ public sealed class CameraPipeline
         IAnalyticEvaluatorProvider? evaluatorProvider = null,
         ILineProvider? lineProvider = null,
         IReadOnlyList<LineDefinition>? lines = null,
-        double targetInferenceFps = 0)
+        double targetInferenceFps = 0,
+        ICustomObjectRuntime? customRuntime = null,
+        Action<IReadOnlyDictionary<string, string>>? customErrors = null)
     {
         _cameraId = cameraId;
         _source = source;
@@ -78,6 +82,8 @@ public sealed class CameraPipeline
         _tracker = tracker;
         _evaluatorProvider = evaluatorProvider;
         _targetInferenceFps = targetInferenceFps;
+        _customRuntime = customRuntime;
+        _customErrors = customErrors;
 
         if (evaluators != null)
         {
@@ -111,6 +117,7 @@ public sealed class CameraPipeline
         double lastInferenceTimestamp = -1;
         PoseBatch? lastPose = null;
         IReadOnlyList<EvaluatedPerson> lastOverlayPeople = [];
+        IReadOnlyList<ObjectDetection> objects = [];
         double lastEvalDurationMs = 0;
         int lastEvaluatorErrors = 0;
         var minInferenceIntervalMs = _targetInferenceFps > 0 ? 1000.0 / _targetInferenceFps : 0.0;
@@ -157,6 +164,10 @@ public sealed class CameraPipeline
 
                 if (activeEvaluators.Count == 0)
                 {
+                    objects = [];
+                    if (_customRuntime != null)
+                        await _customRuntime.ProcessAsync(_cameraId, captured.AsImageFrame(), captured.TimestampUtc, [], cancellationToken);
+                    _customErrors?.Invoke(new Dictionary<string, string>());
                     processed++;
                     var elapsedSecs = Stopwatch.GetElapsedTime(started).TotalSeconds;
                     var currentFps = elapsedSecs > 0 ? processed / elapsedSecs : 0;
@@ -210,7 +221,9 @@ public sealed class CameraPipeline
                     inferenceCount++;
 
                     // 1. Single inference execution per frame (only when active evaluators exist)
-                    pose = await _backend.InferAsync(captured.AsImageFrame(), cancellationToken);
+                    pose = activeEvaluators.Any(e => e is not CustomObjectEvaluator)
+                        ? await _backend.InferAsync(captured.AsImageFrame(), cancellationToken)
+                        : new PoseBatch([], TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
                     lastPose = pose;
 
                     // 2. Single tracking update per frame
@@ -233,7 +246,18 @@ public sealed class CameraPipeline
                     var evalStart = Stopwatch.GetTimestamp();
                     evaluatorErrors = 0;
 
-                    foreach (var evaluator in activeEvaluators)
+                    if (_customRuntime != null)
+                    {
+                        var result = await _customRuntime.ProcessAsync(_cameraId, captured.AsImageFrame(), captured.TimestampUtc,
+                            activeEvaluators.OfType<CustomObjectEvaluator>().ToArray(), cancellationToken);
+                        objects = result.Detections;
+                        _customErrors?.Invoke(result.Errors);
+                        evaluatorErrors += result.Errors.Count;
+                        foreach (var ev in result.Events)
+                            allLegacyEvents.Add(AnalyticEventAdapter.ToLegacyHandEvent(ev) with { SnapshotJpeg = [] });
+                    }
+
+                    foreach (var evaluator in activeEvaluators.Where(e => e is not CustomObjectEvaluator))
                     {
                         try
                         {
@@ -310,9 +334,15 @@ public sealed class CameraPipeline
                     preliminaryTotal,
                     _backend.Device.Name,
                     _backend.ExecutionInfo.ProviderName,
-                    _modelName);
+                    activeEvaluators.All(e => e is CustomObjectEvaluator)
+                        ? "Detección personalizada (CPU)" : _modelName);
 
                 var annotated = _overlay.Draw(captured, overlayPeople, zones, statistics);
+                if (objects.Count > 0 && _overlay is IObjectFrameOverlay objectOverlay)
+                {
+                    using var original = annotated;
+                    annotated = objectOverlay.DrawObjects(original, objects);
+                }
                 var overlayTime = Stopwatch.GetElapsedTime(beforeOverlay);
                 var totalTime = Stopwatch.GetElapsedTime(frameStarted);
                 var age = Stopwatch.GetElapsedTime(captured.AcquiredAtStopwatchTicks).TotalMilliseconds;
@@ -335,7 +365,7 @@ public sealed class CameraPipeline
                     DroppedInferenceFrames: inferenceDroppedCount);
 
                 yield return new ProcessedCameraFrame(
-                    _cameraId, annotated, overlayPeople, emittedEvents, metrics);
+                    _cameraId, annotated, overlayPeople, emittedEvents, metrics) { Objects = objects };
             }
         }
     }

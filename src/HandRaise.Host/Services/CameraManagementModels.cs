@@ -64,6 +64,9 @@ public sealed record CameraProbeSubscriptionResult(
 
 public interface ICameraManagementService
 {
+    event Action<string, bool>? CameraRunningStateChanged;
+    event Action? CamerasChanged;
+
     Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default);
     Task<CameraView?> GetAsync(string id, CancellationToken token = default);
     Task<CameraView> CreateAsync(CameraWriteRequest request, CancellationToken token = default);
@@ -102,6 +105,9 @@ public interface ICameraCredentialStore
 
 internal sealed class DisabledCameraManagementService : ICameraManagementService
 {
+    public event Action<string, bool>? CameraRunningStateChanged;
+    public event Action? CamerasChanged;
+
     public Task<IReadOnlyList<CameraView>> ListAsync(CancellationToken token = default) => Task.FromResult<IReadOnlyList<CameraView>>([]);
     public Task<CameraView?> GetAsync(string id, CancellationToken token = default) => Task.FromResult<CameraView?>(null);
     public Task<CameraView> CreateAsync(CameraWriteRequest request, CancellationToken token = default) => throw Disabled();

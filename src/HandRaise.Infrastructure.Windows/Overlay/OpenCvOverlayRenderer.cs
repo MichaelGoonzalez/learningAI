@@ -7,8 +7,21 @@ using OpenCvSharp;
 
 namespace HandRaise.Infrastructure.Windows.Overlay;
 
-public sealed class OpenCvOverlayRenderer : IFrameOverlay
+public sealed class OpenCvOverlayRenderer : IFrameOverlay, HandRaise.Application.Analytics.IObjectFrameOverlay
 {
+    public VideoFrame DrawObjects(VideoFrame source, IReadOnlyList<HandRaise.Application.Analytics.ObjectDetection> detections)
+    {
+        using var mat = ToMat(source);
+        foreach (var d in detections)
+        {
+            Cv2.Rectangle(mat, new Point(d.Box.Left, d.Box.Top), new Point(d.Box.Right, d.Box.Bottom), new Scalar(220, 190, 40), 2);
+            Cv2.PutText(mat, $"{d.ClassName} {d.Confidence:P0}", new Point(d.Box.Left, Math.Max(16, d.Box.Top - 5)),
+                HersheyFonts.HersheySimplex, .6, new Scalar(220, 190, 40), 2);
+        }
+        var pixels = new byte[source.Width * source.Height * 3];
+        Marshal.Copy(mat.Data, pixels, 0, pixels.Length);
+        return new(source.Width, source.Height, pixels, source.Sequence, source.TimestampMilliseconds, source.AcquiredAtStopwatchTicks, source.TimestampUtc);
+    }
     private readonly double _minimumKeypointConfidence;
 
     private static readonly (int Start, int End)[] Skeleton =

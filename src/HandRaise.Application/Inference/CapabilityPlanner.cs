@@ -52,7 +52,16 @@ public sealed class CapabilityPlanner : ICapabilityPlanner
         }
 
         var selectedProviders = new List<SelectedProviderInfo>();
-        var remainingCaps = new HashSet<InferenceCapability>(requiredCapabilities);
+        foreach (var custom in enabledAnalytics.Where(a => CustomObjectEvaluator.IsCustom(a.AnalyticTypeId))
+                     .Select(a => new CustomObjectEvaluator(a)).DistinctBy(a => a.ModelId))
+        {
+            var model = _registry.GetModel(custom.ModelId);
+            if (model?.CustomTraining != null)
+                selectedProviders.Add(new("custom-object-runtime", model.Id, model.DisplayName + " · " + model.Version,
+                    [InferenceCapability.ObjectDetection], "cpu"));
+        }
+        var remainingCaps = new HashSet<InferenceCapability>(enabledAnalytics.Where(a => !CustomObjectEvaluator.IsCustom(a.AnalyticTypeId))
+            .SelectMany(a => catalog.GetById(a.AnalyticTypeId)?.RequiredCapabilities ?? []));
         var availableProviders = _registry.GetProviders();
 
         // Greedily select provider covering the most remaining capabilities
@@ -99,4 +108,3 @@ public sealed class CapabilityPlanner : ICapabilityPlanner
             DependentAnalyticIds: dependentAnalyticIds);
     }
 }
-
